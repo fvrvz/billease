@@ -8,13 +8,13 @@ interface OidcAuthModalProps {
 }
 
 export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
-  const { user, loginWithToken } = useAuth();
+  const { user, loginWithToken, setOidcConfig, initiateAuthforestLogin } = useAuth();
 
   const [issuerUrl, setIssuerUrl] = createSignal(
-    localStorage.getItem('authforest_issuer') || 'https://authforest.example.com'
+    sessionStorage.getItem('authforest_issuer') || 'http://localhost:8080'
   );
   const [clientId, setClientId] = createSignal(
-    localStorage.getItem('authforest_client_id') || 'billease-web'
+    sessionStorage.getItem('authforest_client_id') || 'billease-web'
   );
   const [pastedJwt, setPastedJwt] = createSignal('');
   const [jwtParseResult, setJwtParseResult] = createSignal<DecodedOidcClaims | null>(null);
@@ -66,34 +66,10 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
     props.onClose();
   };
 
-  // Launch OIDC Authorization Code Flow with PKCE
+  // Launch OIDC Authorization Code Flow with PKCE via AuthForest
   const handleStartOidcLogin = async () => {
-    localStorage.setItem('authforest_issuer', issuerUrl().trim());
-    localStorage.setItem('authforest_client_id', clientId().trim());
-
-    // Generate random PKCE verifier
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    const verifier = btoa(String.fromCharCode.apply(null, Array.from(array)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-    
-    sessionStorage.setItem('oidc_verifier', verifier);
-
-    // Compute code challenge (SHA-256)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    const challenge = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-
-    const redirectUri = window.location.origin;
-    const authUrl = `${issuerUrl().trim().replace(/\/$/, '')}/authorize?response_type=code&client_id=${encodeURIComponent(clientId().trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid%20profile%20email&code_challenge=${challenge}&code_challenge_method=S256`;
-
-    window.location.href = authUrl;
+    setOidcConfig(issuerUrl().trim(), clientId().trim());
+    await initiateAuthforestLogin();
   };
 
   return (

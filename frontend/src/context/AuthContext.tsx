@@ -22,23 +22,34 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>();
 
 export function AuthProvider(props: { children: JSX.Element }) {
-  const [user, setUser] = createSignal<User | null>({
-    id: 'b0000000-0000-0000-0000-000000000002',
-    tenantId: 'a0000000-0000-0000-0000-000000000001',
-    username: 'ganesh_owner',
-    fullName: 'Ganesh Patil (Owner)',
-    role: 'STORE_ADMIN',
-    isActive: true
-  });
+  const getInitialUser = (): User => {
+    const saved = sessionStorage.getItem('billease_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved) as User;
+      } catch {
+        // fallback
+      }
+    }
+    return {
+      id: 'b0000000-0000-0000-0000-000000000002',
+      tenantId: 'a0000000-0000-0000-0000-000000000001',
+      username: 'ganesh_owner',
+      fullName: 'Ganesh Patil (Owner)',
+      role: 'STORE_ADMIN',
+      isActive: true
+    };
+  };
 
+  const [user, setUser] = createSignal<User | null>(getInitialUser());
   const [tenant, setTenant] = createSignal<Tenant | null>(null);
-  const [token, setToken] = createSignal<string>(localStorage.getItem('billease_token') || 'owner-token');
+  const [token, setToken] = createSignal<string>(sessionStorage.getItem('billease_token') || 'owner-token');
   
   const [oidcIssuer, setOidcIssuer] = createSignal<string>(
-    localStorage.getItem('authforest_issuer') || 'http://localhost:8000'
+    sessionStorage.getItem('authforest_issuer') || 'http://localhost:8080'
   );
   const [oidcClientId, setOidcClientId] = createSignal<string>(
-    localStorage.getItem('authforest_client_id') || 'billease-web'
+    sessionStorage.getItem('authforest_client_id') || 'billease-web'
   );
 
   onMount(async () => {
@@ -148,8 +159,8 @@ export function AuthProvider(props: { children: JSX.Element }) {
   const setOidcConfig = (issuer: string, clientId: string) => {
     setOidcIssuer(issuer);
     setOidcClientId(clientId);
-    localStorage.setItem('authforest_issuer', issuer);
-    localStorage.setItem('authforest_client_id', clientId);
+    sessionStorage.setItem('authforest_issuer', issuer);
+    sessionStorage.setItem('authforest_client_id', clientId);
   };
 
   const isSuperAdmin = () => user()?.role === 'SUPER_ADMIN';
@@ -159,11 +170,14 @@ export function AuthProvider(props: { children: JSX.Element }) {
   const loginWithToken = (t: string, u: User) => {
     setToken(t);
     setUser(u);
-    localStorage.setItem('billease_token', t);
+    sessionStorage.setItem('billease_token', t);
+    sessionStorage.setItem('billease_user', JSON.stringify(u));
   };
 
   const logout = () => {
-    localStorage.removeItem('billease_token');
+    sessionStorage.removeItem('billease_token');
+    sessionStorage.removeItem('billease_user');
+    sessionStorage.removeItem('authforest_pkce_verifier');
     switchRole('CASHIER');
   };
 
