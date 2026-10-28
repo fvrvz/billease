@@ -55,7 +55,7 @@ class NotificationService(
       IO.println(s"[Notification Mock] Stock Alert for '$productName' -> Phone: $recipientPhone, Email: $recipientEmail") *>
       logAlert(tenantId, Some(productId), AlertType.LOW_STOCK, message, AlertChannel.WHATSAPP, recipientPhone, "SENT", Some("Simulated / Local Mode"))
 
-  private def sendWhatsapp(toPhone: String, text: String): IO[Either[String, Unit]] =
+  def sendWhatsapp(toPhone: String, text: String): IO[Either[String, Unit]] =
     val urlStr = s"${config.whatsapp.apiUrl}/${config.whatsapp.phoneNumberId}/messages"
     Uri.fromString(urlStr) match
       case Left(err) => IO.pure(Left(s"Invalid WhatsApp API URL: $err"))
@@ -79,6 +79,30 @@ class NotificationService(
           if status.isSuccess then Right(())
           else Left(s"WhatsApp API returned status ${status.code}")
         }.handleError(e => Left(e.getMessage))
+
+  def sendInvoiceWhatsapp(
+      tenantId: UUID,
+      phone: String,
+      billText: String
+  ): IO[SendWhatsappBillResponse] =
+    val cleanPhone = phone.replaceAll("[^0-9]", "")
+    val targetPhone = if cleanPhone.startsWith("91") && cleanPhone.length == 12 then cleanPhone
+      else if cleanPhone.length == 10 then s"91$cleanPhone"
+      else cleanPhone
+    val encoded = java.net.URLEncoder.encode(billText, "UTF-8")
+    val waUrl = s"https://wa.me/$targetPhone?text=$encoded"
+
+    if config.whatsapp.enabled && config.whatsapp.accessToken.nonEmpty then
+      sendWhatsapp(targetPhone, billText).map {
+        case Right(_) =>
+          SendWhatsappBillResponse(true, waUrl, s"Bill WhatsApp message dispatched to +$targetPhone")
+        case Left(err) =>
+          SendWhatsappBillResponse(false, waUrl, s"WhatsApp API note: $err. Direct link ready.")
+      }
+    else
+      IO.println(s"[Notification Mock] WhatsApp Bill for +$targetPhone:\n$billText").as(
+        SendWhatsappBillResponse(true, waUrl, s"WhatsApp link generated for +$targetPhone")
+      )
 
   private def sendEmail(toEmail: String, subject: String, body: String): IO[Unit] =
     IO.println(s"[Email Service] Sending email to $toEmail: Subject: $subject, Body: $body")

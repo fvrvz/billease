@@ -10,7 +10,10 @@ import {
   CouponCreateInput,
   InvoiceCreateInput,
   InvoiceItemInput,
-  LoginResponse
+  LoginResponse,
+  SalesOverview,
+  SoldItemStats,
+  SendWhatsappBillResponse
 } from '../types';
 
 const API_BASE = '/api';
@@ -358,9 +361,112 @@ export const apiClient = {
     });
     localStorage.setItem('billease_products', JSON.stringify(prods));
 
+    // Save fallback invoice
+    const savedInvoices = getFallbackInvoices();
+    savedInvoices.unshift(invoice);
+    localStorage.setItem('billease_invoices', JSON.stringify(savedInvoices));
+
     return invoice;
+  },
+
+  async listInvoices(tenantId: string, token: string): Promise<Invoice[]> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) return (await res.json()) as Invoice[];
+    } catch (_) {}
+    return getFallbackInvoices();
+  },
+
+  async getSalesOverview(tenantId: string, token: string): Promise<SalesOverview> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/overview`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) return (await res.json()) as SalesOverview;
+    } catch (_) {}
+    const invs = getFallbackInvoices();
+    const totalSales = invs.reduce((sum, inv) => sum + inv.grandTotal, 0);
+    const totalItems = invs.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
+    const cash = invs.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
+    const upi = invs.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
+    const khata = invs.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
+    const card = invs.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
+    return {
+      totalSales,
+      totalInvoices: invs.length,
+      totalItemsSold: totalItems,
+      cashSales: cash,
+      upiSales: upi,
+      khataSales: khata,
+      cardSales: card,
+      splitSales: 0
+    };
+  },
+
+  async getSoldItems(tenantId: string, token: string): Promise<SoldItemStats[]> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/sold-items`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) return (await res.json()) as SoldItemStats[];
+    } catch (_) {}
+    const invs = getFallbackInvoices();
+    const itemMap = new Map<string, { qty: number; revenue: number; prices: number[]; count: number }>();
+    invs.forEach(inv => {
+      inv.items?.forEach(it => {
+        const existing = itemMap.get(it.productName) || { qty: 0, revenue: 0, prices: [], count: 0 };
+        existing.qty += it.quantity;
+        existing.revenue += it.totalAmount;
+        existing.prices.push(it.unitPrice);
+        existing.count += 1;
+        itemMap.set(it.productName, existing);
+      });
+    });
+    return Array.from(itemMap.entries()).map(([productName, data]) => ({
+      productName,
+      totalQuantity: data.qty,
+      totalRevenue: data.revenue,
+      avgPrice: data.prices.length > 0 ? (data.prices.reduce((a, b) => a + b, 0) / data.prices.length) : 0,
+      ordersCount: data.count
+    })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  },
+
+  async sendInvoiceWhatsapp(
+    tenantId: string,
+    invoiceId: string,
+    token: string,
+    phone: string,
+    customMessage?: string
+  ): Promise<SendWhatsappBillResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/whatsapp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ phone, customMessage })
+      });
+      if (res.ok) return (await res.json()) as SendWhatsappBillResponse;
+    } catch (_) {}
+    const clean = phone.replace(/[^0-9]/g, '');
+    const target = clean.length === 10 ? `91${clean}` : clean;
+    const msg = customMessage || `🧾 Bill copy from Billease for invoice #${invoiceId}`;
+    return {
+      sent: true,
+      whatsappUrl: `https://wa.me/${target}?text=${encodeURIComponent(msg)}`,
+      message: `WhatsApp link ready for +${target}`
+    };
   }
 };
+
+function getFallbackInvoices(): Invoice[] {
+  const saved = localStorage.getItem('billease_invoices');
+  if (saved) return JSON.parse(saved) as Invoice[];
+  return [];
+}
 
 // Fallback seed data
 function getFallbackTenant(): Tenant {

@@ -2,7 +2,7 @@ import { Component, createSignal, onMount, onCleanup, For, Show } from 'solid-js
 import { useAuth } from '../context/AuthContext';
 import { Product, Customer, CartItem, PaymentMode, Invoice } from '../types';
 import { apiClient } from '../api/client';
-import { Search, Plus, Minus, Trash2, QrCode, Banknote, BookOpen, Award } from 'lucide-solid';
+import { Search, Plus, Minus, Trash2, QrCode, Banknote, BookOpen, Award, UserCheck, MessageCircle } from 'lucide-solid';
 
 interface POSRegisterProps {
   onBillGenerated: (invoice: Invoice) => void;
@@ -17,8 +17,11 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [cart, setCart] = createSignal<CartItem[]>([]);
   
-  // Selected Customer
+  // Selected Customer & Buyer Details
   const [selectedCustomerId, setSelectedCustomerId] = createSignal<string>('');
+  const [buyerName, setBuyerName] = createSignal('');
+  const [buyerPhone, setBuyerPhone] = createSignal('');
+  const [sendWhatsappCopy, setSendWhatsappCopy] = createSignal(true);
   
   // Discounts & Coupons
   const [billDiscountPercent, setBillDiscountPercent] = createSignal<number>(0);
@@ -72,6 +75,17 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
 
   // Selected customer object
   const selectedCustomer = () => customers().find(c => c.id === selectedCustomerId());
+
+  const handleSelectCustomer = (id: string) => {
+    setSelectedCustomerId(id);
+    if (id) {
+      const c = customers().find(x => x.id === id);
+      if (c) {
+        setBuyerName(c.name);
+        setBuyerPhone(c.phone);
+      }
+    }
+  };
 
   // Filtered products for quick-add list
   const filteredProducts = () => {
@@ -133,6 +147,9 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
     setCouponMsg(null);
     setRedeemPoints(0);
     setCashTendered(0);
+    setBuyerName('');
+    setBuyerPhone('');
+    setSelectedCustomerId('');
   };
 
   // Mathematical Totals
@@ -198,10 +215,13 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
       props.openUpiModal(total, upiUri);
     }
 
+    const finalCustomerName = buyerName().trim() || selectedCustomer()?.name || undefined;
+    const finalCustomerPhone = buyerPhone().trim() || selectedCustomer()?.phone || undefined;
+
     const payload = {
       customerId: selectedCustomerId() || undefined,
-      customerName: selectedCustomer()?.name,
-      customerPhone: selectedCustomer()?.phone,
+      customerName: finalCustomerName,
+      customerPhone: finalCustomerPhone,
       items: cart().map(ci => ({
         productId: ci.product.id,
         productName: ci.product.name,
@@ -222,6 +242,14 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
     };
 
     const invoice = await apiClient.createInvoice(t.id, token(), payload);
+
+    // Send copy of bill on WhatsApp if mobile number is provided & toggle checked
+    if (finalCustomerPhone && sendWhatsappCopy()) {
+      try {
+        await apiClient.sendInvoiceWhatsapp(t.id, invoice.id, token(), finalCustomerPhone);
+      } catch (_) {}
+    }
+
     props.onBillGenerated(invoice);
     clearCart();
     loadData();
@@ -320,12 +348,12 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
       {/* Right Column: Checkout Register & Billing Math */}
       <div class="lg:col-span-5 space-y-4">
         
-        {/* Customer Khata & Loyalty Selection */}
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div class="flex items-center justify-between mb-2">
+        {/* Customer & Buyer Information */}
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+          <div class="flex items-center justify-between">
             <label class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <BookOpen class="w-4 h-4 text-emerald-600" />
-              Customer / Khata Account
+              <UserCheck class="w-4 h-4 text-emerald-600" />
+              Buyer Details (Optional)
             </label>
             <Show when={selectedCustomer()}>
               <span class="text-xs font-semibold text-emerald-700 flex items-center gap-1">
@@ -335,25 +363,74 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
             </Show>
           </div>
 
-          <select
-            value={selectedCustomerId()}
-            onChange={(e) => setSelectedCustomerId(e.currentTarget.value)}
-            class="w-full p-2.5 rounded-lg border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="">Walk-in Customer (No Khata)</option>
-            <For each={customers()}>
-              {(cust) => (
-                <option value={cust.id}>
-                  {cust.name} ({cust.phone}) {cust.currentDue > 0 ? `• Due: ₹${cust.currentDue}` : ''}
-                </option>
-              )}
-            </For>
-          </select>
+          {/* Existing Khata Account selector */}
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1">Select Khata Account (Optional)</label>
+            <select
+              value={selectedCustomerId()}
+              onChange={(e) => handleSelectCustomer(e.currentTarget.value)}
+              class="w-full p-2 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500 bg-white"
+            >
+              <option value="">Walk-in Customer / Manual Entry</option>
+              <For each={customers()}>
+                {(cust) => (
+                  <option value={cust.id}>
+                    {cust.name} ({cust.phone}) {cust.currentDue > 0 ? `• Due: ₹${cust.currentDue}` : ''}
+                  </option>
+                )}
+              </For>
+            </select>
+          </div>
+
+          {/* Optional Buyer Name & Mobile Number */}
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Buyer Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Ramesh Kumar"
+                value={buyerName()}
+                onInput={(e) => setBuyerName(e.currentTarget.value)}
+                class="w-full p-2 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 mb-1">Mobile No (WhatsApp)</label>
+              <input
+                type="tel"
+                placeholder="e.g. 9822012345"
+                value={buyerPhone()}
+                onInput={(e) => setBuyerPhone(e.currentTarget.value)}
+                class="w-full p-2 rounded-lg border border-slate-200 text-xs font-mono focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* WhatsApp bill send toggle if phone is entered */}
+          <Show when={buyerPhone().trim().length >= 10}>
+            <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
+              <label class="flex items-center gap-2 cursor-pointer font-medium">
+                <input
+                  type="checkbox"
+                  checked={sendWhatsappCopy()}
+                  onChange={(e) => setSendWhatsappCopy(e.currentTarget.checked)}
+                  class="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                />
+                <span class="flex items-center gap-1.5 font-bold">
+                  <MessageCircle class="w-4 h-4 text-emerald-600 shrink-0" />
+                  Send copy of bill on WhatsApp
+                </span>
+              </label>
+              <span class="text-[10px] font-mono text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">
+                +{buyerPhone().trim().replace(/[^0-9]/g, '')}
+              </span>
+            </div>
+          </Show>
 
           {/* Loyalty points redemption if customer has points */}
           <Show when={selectedCustomer() && (selectedCustomer()?.loyaltyPoints || 0) > 0}>
-            <div class="mt-2.5 p-2 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between">
-              <span class="text-xs text-emerald-900 font-medium">
+            <div class="mt-2 p-2 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-between">
+              <span class="text-xs text-indigo-900 font-medium">
                 Redeem Loyalty Points (₹1 per point):
               </span>
               <input
@@ -362,7 +439,7 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
                 max={selectedCustomer()?.loyaltyPoints || 0}
                 value={redeemPoints()}
                 onInput={(e) => setRedeemPoints(Math.min(selectedCustomer()?.loyaltyPoints || 0, Number(e.currentTarget.value) || 0))}
-                class="w-20 px-2 py-1 bg-white border border-emerald-200 rounded text-xs text-right font-bold"
+                class="w-20 px-2 py-1 bg-white border border-indigo-200 rounded text-xs text-right font-bold"
               />
             </div>
           </Show>
