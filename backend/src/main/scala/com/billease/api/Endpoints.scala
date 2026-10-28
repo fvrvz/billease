@@ -89,6 +89,21 @@ object Endpoints:
     .out(jsonBody[SendWhatsappBillResponse])
     .errorOut(stringBody)
 
+  def getInvoicePdfEndpoint = baseEndpoint.get
+    .in("tenants" / path[UUID]("tenantId") / "invoices" / path[UUID]("invoiceId") / "pdf")
+    .in(auth.bearer[String]())
+    .out(header[String]("Content-Type"))
+    .out(header[Option[String]]("Content-Disposition"))
+    .out(byteArrayBody)
+    .errorOut(stringBody)
+
+  def getPublicInvoicePdfEndpoint = baseEndpoint.get
+    .in("public" / "invoices" / path[UUID]("invoiceId") / "pdf")
+    .out(header[String]("Content-Type"))
+    .out(header[Option[String]]("Content-Disposition"))
+    .out(byteArrayBody)
+    .errorOut(stringBody)
+
   // Khata & Customers
   def listCustomersEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "customers")

@@ -1,7 +1,8 @@
 import { Component, For, Show, createSignal } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Invoice } from '../types';
-import { Printer, CheckCircle, MessageCircle } from 'lucide-solid';
+import { Printer, CheckCircle, MessageCircle, FileDown } from 'lucide-solid';
+import { downloadInvoicePdfLocally, shareInvoicePdf } from '../utils/pdfGenerator';
 
 interface ThermalReceiptModalProps {
   invoice: Invoice;
@@ -11,26 +12,50 @@ interface ThermalReceiptModalProps {
 export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) => {
   const { tenant } = useAuth();
   const [customPhone, setCustomPhone] = createSignal('');
+  const [isSharing, setIsSharing] = createSignal(false);
 
   const handlePrint = () => {
     window.print();
   };
 
+  const handleDownloadPdf = () => {
+    const t = tenant();
+    downloadInvoicePdfLocally(props.invoice, {
+      name: t?.name,
+      legalName: t?.legalName,
+      address: t?.address,
+      city: t?.city,
+      phone: t?.phone,
+      gstin: t?.gstin,
+      hasGst: t?.hasGst,
+    });
+  };
+
+  const handleSharePdf = async () => {
+    setIsSharing(true);
+    try {
+      const t = tenant();
+      await shareInvoicePdf(
+        props.invoice,
+        {
+          name: t?.name,
+          legalName: t?.legalName,
+          address: t?.address,
+          city: t?.city,
+          phone: t?.phone,
+          gstin: t?.gstin,
+          hasGst: t?.hasGst,
+        },
+        props.invoice.customerPhone || customPhone()
+      );
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   const formattedDate = () => {
     const d = new Date(props.invoice.createdAt);
     return `${d.toLocaleDateString('en-IN')} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
-  };
-
-  const getWhatsappMessage = () => {
-    const t = tenant();
-    const itemsSummary = props.invoice.items?.map(it => `• ${it.quantity}x ${it.productName} - ₹${it.totalAmount.toFixed(2)}`).join('\n') || '';
-    return `🧾 *${t?.name || 'Store'}*\nBill No: ${props.invoice.invoiceNumber}\nDate: ${formattedDate()}\nBuyer: ${props.invoice.customerName || 'Customer'}\n--------------------------\nItems:\n${itemsSummary}\n--------------------------\nGrand Total: *₹${props.invoice.grandTotal.toFixed(2)}*\nPayment Mode: ${props.invoice.paymentMode}\n--------------------------\nThank you for shopping with us! 🙏`;
-  };
-
-  const whatsappUrl = () => {
-    const phone = (props.invoice.customerPhone || customPhone()).replace(/[^0-9]/g, '');
-    const target = phone.length === 10 ? `91${phone}` : phone;
-    return `https://wa.me/${target}?text=${encodeURIComponent(getWhatsappMessage())}`;
   };
 
   const receiptUpiUrl = () => {
@@ -59,30 +84,38 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
 
         {/* Action Buttons (Not printed) */}
         <div class="space-y-2 print:hidden">
-          <div class="flex items-center gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button
               onClick={handlePrint}
-              class="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
+              class="py-2.5 px-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+              title="Print Thermal Bill (Ctrl+P)"
             >
-              <Printer class="w-4 h-4" />
-              Print Thermal Bill (Ctrl+P)
+              <Printer class="w-4 h-4 shrink-0" />
+              <span>Print</span>
             </button>
 
-            <Show when={props.invoice.customerPhone}>
-              <a
-                href={whatsappUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors"
-              >
-                <MessageCircle class="w-4 h-4" />
-                WhatsApp Copy
-              </a>
-            </Show>
+            <button
+              onClick={handleDownloadPdf}
+              class="py-2.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+              title="Download PDF Bill Copy"
+            >
+              <FileDown class="w-4 h-4 shrink-0" />
+              <span>PDF Bill</span>
+            </button>
+
+            <button
+              onClick={handleSharePdf}
+              disabled={isSharing()}
+              class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+              title="Send or Share PDF Bill on WhatsApp"
+            >
+              <MessageCircle class="w-4 h-4 shrink-0" />
+              <span>WhatsApp</span>
+            </button>
 
             <button
               onClick={props.onClose}
-              class="px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors"
+              class="py-2.5 px-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-colors flex items-center justify-center"
             >
               Done (F2)
             </button>
@@ -94,21 +127,25 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
               <MessageCircle class="w-4 h-4 text-emerald-600 shrink-0" />
               <input
                 type="tel"
-                placeholder="Send copy to WhatsApp mobile no..."
+                placeholder="Send PDF to WhatsApp mobile no..."
                 value={customPhone()}
                 onInput={(e) => setCustomPhone(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && customPhone().trim().length >= 10) {
+                    handleSharePdf();
+                  }
+                }}
                 class="flex-1 p-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-mono"
               />
-              <a
-                href={whatsappUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={handleSharePdf}
+                disabled={customPhone().trim().length < 10 || isSharing()}
                 class={`px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs ${
                   customPhone().trim().length < 10 ? 'opacity-50 pointer-events-none' : ''
                 }`}
               >
-                Send
-              </a>
+                Send PDF
+              </button>
             </div>
           </Show>
         </div>
