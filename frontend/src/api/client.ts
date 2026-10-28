@@ -1,6 +1,5 @@
 import {
   Tenant,
-  User,
   Product,
   Customer,
   Coupon,
@@ -19,7 +18,7 @@ export const apiClient = {
   async getTenant(tenantId: string): Promise<Tenant> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}`);
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Tenant;
     } catch (_) {}
     return getFallbackTenant();
   },
@@ -34,7 +33,7 @@ export const apiClient = {
         },
         body: JSON.stringify(updates)
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Tenant;
     } catch (_) {}
     const current = getFallbackTenant();
     const updated: Tenant = { ...current, ...updates };
@@ -46,7 +45,7 @@ export const apiClient = {
     try {
       const q = query ? `?q=${encodeURIComponent(query)}` : '';
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/products${q}`);
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Product[];
     } catch (_) {}
     return getFallbackProducts(query);
   },
@@ -61,7 +60,7 @@ export const apiClient = {
         },
         body: JSON.stringify(product)
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Product;
     } catch (_) {}
     const newProduct: Product = {
       id: 'prod-' + Date.now(),
@@ -90,7 +89,7 @@ export const apiClient = {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Customer[];
     } catch (_) {}
     return getFallbackCustomers();
   },
@@ -105,7 +104,7 @@ export const apiClient = {
         },
         body: JSON.stringify(customer)
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Customer;
     } catch (_) {}
     const newCust: Customer = {
       id: 'cust-' + Date.now(),
@@ -134,7 +133,7 @@ export const apiClient = {
         },
         body: JSON.stringify({ customerId, amount, paymentMethod, notes })
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Customer;
     } catch (_) {}
     const list = getFallbackCustomers();
     const cust = list.find(c => c.id === customerId);
@@ -151,7 +150,7 @@ export const apiClient = {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Coupon[];
     } catch (_) {}
     return getFallbackCoupons();
   },
@@ -166,7 +165,7 @@ export const apiClient = {
         },
         body: JSON.stringify(coupon)
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Coupon;
     } catch (_) {}
     const newCoupon: Coupon = {
       id: 'coup-' + Date.now(),
@@ -194,7 +193,7 @@ export const apiClient = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, cartTotal })
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as { isValid: boolean; discountAmount: number; message: string };
     } catch (_) {}
     const coupons = getFallbackCoupons();
     const found = coupons.find(c => c.code.toUpperCase() === code.toUpperCase() && c.isActive);
@@ -224,7 +223,7 @@ export const apiClient = {
         },
         body: JSON.stringify(invoiceData)
       });
-      if (res.ok) return await res.json();
+      if (res.ok) return (await res.json()) as Invoice;
     } catch (_) {}
 
     // Offline / Mock calculation
@@ -334,7 +333,7 @@ export const apiClient = {
 // Fallback seed data
 function getFallbackTenant(): Tenant {
   const saved = localStorage.getItem('billease_tenant');
-  if (saved) return JSON.parse(saved);
+  if (saved) return JSON.parse(saved) as Tenant;
   return {
     id: 'a0000000-0000-0000-0000-000000000001',
     slug: 'shree-ganesh-supermarket',
@@ -363,7 +362,7 @@ function getFallbackTenant(): Tenant {
 
 function getFallbackProducts(query?: string): Product[] {
   const saved = localStorage.getItem('billease_products');
-  let prods: Product[] = saved ? JSON.parse(saved) : [
+  let prods: Product[] = saved ? (JSON.parse(saved) as Product[]) : [
     {
       id: 'd0000000-0000-0000-0000-000000000001',
       tenantId: 'a0000000-0000-0000-0000-000000000001',
@@ -455,7 +454,7 @@ function getFallbackProducts(query?: string): Product[] {
 
 function getFallbackCustomers(): Customer[] {
   const saved = localStorage.getItem('billease_customers');
-  if (saved) return JSON.parse(saved);
+  if (saved) return JSON.parse(saved) as Customer[];
   return [
     {
       id: 'f0000000-0000-0000-0000-000000000001',
@@ -482,7 +481,7 @@ function getFallbackCustomers(): Customer[] {
 
 function getFallbackCoupons(): Coupon[] {
   const saved = localStorage.getItem('billease_coupons');
-  if (saved) return JSON.parse(saved);
+  if (saved) return JSON.parse(saved) as Coupon[];
   return [
     {
       id: '10000000-0000-0000-0000-000000000001',

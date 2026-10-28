@@ -1,7 +1,7 @@
 import { Component, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Invoice } from '../types';
-import { Printer, CheckCircle, Share2 } from 'lucide-solid';
+import { Printer, CheckCircle } from 'lucide-solid';
 
 interface ThermalReceiptModalProps {
   invoice: Invoice;

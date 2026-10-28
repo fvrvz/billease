@@ -1,5 +1,5 @@
 import { createContext, useContext, createSignal, JSX, onMount } from 'solid-js';
-import { User, Tenant, Role } from '../types';
+import { User, Tenant, Role, DecodedOidcClaims, AuthForestTokenResponse } from '../types';
 import { apiClient } from '../api/client';
 
 interface AuthContextType {
@@ -60,7 +60,6 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // 2. Check for incoming AuthForest / OIDC Authorization Code in URL
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    const state = urlParams.get('state');
 
     if (code) {
       const storedVerifier = sessionStorage.getItem('authforest_pkce_verifier');
@@ -100,16 +99,18 @@ export function AuthProvider(props: { children: JSX.Element }) {
       throw new Error(`AuthForest token exchange returned ${res.status}`);
     }
 
-    const data = await res.json();
-    const accessToken = data.access_token;
-    const idToken = data.id_token || data.access_token;
+    const data: AuthForestTokenResponse = (await res.json()) as AuthForestTokenResponse;
+    const accessToken: string = data.access_token;
+    const idToken: string = data.id_token || data.access_token;
 
     // Decode ID Token payload
-    const parts = idToken.split('.');
+    const parts: string[] = idToken.split('.');
     if (parts.length >= 2) {
-      const claims = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const sub = claims.sub || 'authforest-user';
-      const roleStr = claims.role || (claims.roles && claims.roles[0]) || 'STORE_ADMIN';
+      const claims: DecodedOidcClaims = JSON.parse(
+        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+      ) as DecodedOidcClaims;
+      const sub: string = claims.sub || 'authforest-user';
+      const roleStr: string = claims.role || (claims.roles && claims.roles[0]) || 'STORE_ADMIN';
       const cleanRole: Role = roleStr.toUpperCase().includes('SUPER')
         ? 'SUPER_ADMIN'
         : (roleStr.toUpperCase().includes('ADMIN') || roleStr.toUpperCase().includes('OWNER') ? 'STORE_ADMIN' : 'CASHIER');
@@ -134,7 +135,7 @@ export function AuthProvider(props: { children: JSX.Element }) {
     // Generate random PKCE verifier (32 bytes base64url)
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
-    const verifier = btoa(String.fromCharCode.apply(null, Array.from(array)))
+    const verifier = btoa(String.fromCharCode(...array))
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');

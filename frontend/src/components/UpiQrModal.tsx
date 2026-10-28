@@ -1,4 +1,4 @@
-import { Component, Show } from 'solid-js';
+import { Component } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { QrCode, CheckCircle2 } from 'lucide-solid';
 

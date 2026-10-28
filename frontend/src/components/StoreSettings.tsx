@@ -1,9 +1,9 @@
 import { Component, createSignal, onMount, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Image, QrCode, Printer, Check, ShieldCheck } from 'lucide-solid';
+import { Settings, QrCode, Printer, Check } from 'lucide-solid';
 
 export const StoreSettings: Component = () => {
-  const { tenant, updateTenantData, isCashier } = useAuth();
+  const { tenant, updateTenantData } = useAuth();
 
   const [name, setName] = createSignal('');
   const [legalName, setLegalName] = createSignal('');

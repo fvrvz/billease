@@ -1,7 +1,7 @@
 import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Tenant } from '../types';
-import { ShieldCheck, Store, Plus, CheckCircle2, Sliders, KeyRound, Globe, Phone } from 'lucide-solid';
+import { Store, Plus, CheckCircle2, Globe, Phone } from 'lucide-solid';
 
 export const SuperAdminDashboard: Component = () => {
   const { tenant } = useAuth();
@@ -15,8 +15,6 @@ export const SuperAdminDashboard: Component = () => {
   const [city, setCity] = createSignal('');
   const [hasGst, setHasGst] = createSignal(true);
   const [gstin, setGstin] = createSignal('');
-  const [adminUsername, setAdminUsername] = createSignal('');
-  const [adminPassword, setAdminPassword] = createSignal('store123');
 
   // Feature toggles for the new vendor
   const [featWhatsapp, setFeatWhatsapp] = createSignal(true);

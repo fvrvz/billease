@@ -2,7 +2,7 @@ import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Product } from '../types';
 import { apiClient } from '../api/client';
-import { Package, Plus, Search, AlertTriangle, Barcode, Calendar, Check } from 'lucide-solid';
+import { Package, Plus, Search, AlertTriangle, Barcode, Check } from 'lucide-solid';
 
 export const ProductCatalog: Component = () => {
   const { tenant, token, isCashier } = useAuth();
@@ -235,25 +235,41 @@ export const ProductCatalog: Component = () => {
                 />
               </div>
 
-              {/* Barcode with Auto-Generator */}
-              <div>
-                <div class="flex items-center justify-between mb-1">
-                  <label class="font-bold text-slate-700">Barcode (EAN-13)</label>
-                  <button
-                    type="button"
-                    onClick={generateBarcode}
-                    class="text-emerald-700 hover:underline font-semibold flex items-center gap-1 text-[11px]"
-                  >
-                    <Barcode class="w-3.5 h-3.5" /> Auto-Generate
-                  </button>
+              {/* Barcode & Unit */}
+              <div class="grid grid-cols-3 gap-3">
+                <div class="col-span-2">
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="font-bold text-slate-700">Barcode (EAN-13)</label>
+                    <button
+                      type="button"
+                      onClick={generateBarcode}
+                      class="text-emerald-700 hover:underline font-semibold flex items-center gap-1 text-[11px]"
+                    >
+                      <Barcode class="w-3.5 h-3.5" /> Auto-Generate
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Scan with gun or leave blank..."
+                    value={barcode()}
+                    onInput={(e) => setBarcode(e.currentTarget.value)}
+                    class="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-mono"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Scan with gun or leave blank..."
-                  value={barcode()}
-                  onInput={(e) => setBarcode(e.currentTarget.value)}
-                  class="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-mono"
-                />
+                <div>
+                  <label class="block font-bold text-slate-700 mb-1">Unit</label>
+                  <select
+                    value={unit()}
+                    onChange={(e) => setUnit(e.currentTarget.value)}
+                    class="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                  >
+                    <option value="PACK">PACK</option>
+                    <option value="PCS">PCS</option>
+                    <option value="KG">KG</option>
+                    <option value="L">L</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                  </select>
+                </div>
               </div>
 
               {/* Price Row: MRP & Selling Price */}

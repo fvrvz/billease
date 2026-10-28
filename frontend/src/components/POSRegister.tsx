@@ -2,7 +2,7 @@ import { Component, createSignal, onMount, onCleanup, For, Show } from 'solid-js
 import { useAuth } from '../context/AuthContext';
 import { Product, Customer, CartItem, PaymentMode, Invoice } from '../types';
 import { apiClient } from '../api/client';
-import { Search, Plus, Minus, Trash2, QrCode, CreditCard, Banknote, BookOpen, Tag, Award, Printer } from 'lucide-solid';
+import { Search, Plus, Minus, Trash2, QrCode, Banknote, BookOpen, Award } from 'lucide-solid';
 
 interface POSRegisterProps {
   onBillGenerated: (invoice: Invoice) => void;

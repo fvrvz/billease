@@ -1,7 +1,7 @@
-import { Component, createSignal, onMount, Show } from 'solid-js';
+import { Component, createSignal, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { DecodedOidcClaims } from '../types';
-import { Shield, KeyRound, ExternalLink, Check, AlertCircle, RefreshCw } from 'lucide-solid';
+import { Shield, KeyRound, ExternalLink, Check, AlertCircle } from 'lucide-solid';
 
 interface OidcAuthModalProps {
   onClose: () => void;
@@ -32,7 +32,7 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
     try {
       const parts = token.trim().split('.');
       if (parts.length >= 2) {
-        const payload: DecodedOidcClaims = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload: DecodedOidcClaims = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))) as DecodedOidcClaims;
         setJwtParseResult(payload);
       } else {
         setParseError('Token must be in JWT format (header.payload.signature)');
@@ -46,14 +46,15 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
   };
 
   const handleApplyJwt = () => {
-    if (!jwtParseResult() || !pastedJwt()) return;
+    const claims = jwtParseResult();
+    const token = pastedJwt().trim();
+    if (!claims || !token) return;
     
     // Extract role from claims
-    const claims = jwtParseResult();
     const roleStr = claims.role || (claims.roles && claims.roles[0]) || (claims.realm_access?.roles && claims.realm_access.roles[0]) || 'CASHIER';
     const cleanRole = roleStr.toUpperCase().includes('ADMIN') ? (roleStr.toUpperCase().includes('SUPER') ? 'SUPER_ADMIN' : 'STORE_ADMIN') : 'CASHIER';
     
-    loginWithToken(pastedJwt().trim(), {
+    loginWithToken(token, {
       id: claims.sub || 'authforest-user',
       tenantId: claims.tenant_id || 'a0000000-0000-0000-0000-000000000001',
       username: claims.preferred_username || claims.email || claims.name || claims.sub || 'authforest_user',
@@ -167,21 +168,25 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
           </Show>
 
           <Show when={jwtParseResult()}>
-            <div class="p-2.5 bg-slate-900 text-emerald-400 rounded-lg font-mono text-[10px] space-y-1 max-h-32 overflow-y-auto">
-              <div class="text-slate-400 font-bold uppercase">Decoded OIDC Claims:</div>
-              <div><b>sub:</b> {jwtParseResult().sub}</div>
-              <div><b>preferred_username:</b> {jwtParseResult().preferred_username || jwtParseResult().name || '-'}</div>
-              <div><b>role/roles:</b> {JSON.stringify(jwtParseResult().role || jwtParseResult().roles || jwtParseResult().realm_access?.roles || 'CASHIER')}</div>
-              <div><b>tenant_id:</b> {jwtParseResult().tenant_id || '(global)'}</div>
-            </div>
+            {(claims) => (
+              <>
+                <div class="p-2.5 bg-slate-900 text-emerald-400 rounded-lg font-mono text-[10px] space-y-1 max-h-32 overflow-y-auto">
+                  <div class="text-slate-400 font-bold uppercase">Decoded OIDC Claims:</div>
+                  <div><b>sub:</b> {claims().sub}</div>
+                  <div><b>preferred_username:</b> {claims().preferred_username || claims().name || '-'}</div>
+                  <div><b>role/roles:</b> {JSON.stringify(claims().role || claims().roles || claims().realm_access?.roles || 'CASHIER')}</div>
+                  <div><b>tenant_id:</b> {claims().tenant_id || '(global)'}</div>
+                </div>
 
-            <button
-              onClick={handleApplyJwt}
-              class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Check class="w-4 h-4" />
-              Sign in with this Authforest Identity
-            </button>
+                <button
+                  onClick={handleApplyJwt}
+                  class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Check class="w-4 h-4" />
+                  Sign in with this Authforest Identity
+                </button>
+              </>
+            )}
           </Show>
         </div>
 

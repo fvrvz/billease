@@ -2,7 +2,7 @@ import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Customer } from '../types';
 import { apiClient } from '../api/client';
-import { BookOpen, Plus, Search, MessageCircle, ArrowDownLeft, Award, UserPlus, CheckCircle } from 'lucide-solid';
+import { BookOpen, Plus, Search, MessageCircle, ArrowDownLeft, Award, UserPlus } from 'lucide-solid';
 
 export const CustomerKhata: Component = () => {
   const { tenant, token } = useAuth();
