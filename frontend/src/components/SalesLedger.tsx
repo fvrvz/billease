@@ -2,6 +2,7 @@ import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Invoice, SalesOverview, SoldItemStats } from '../types';
 import { apiClient } from '../api/client';
+import { downloadInvoicePdfLocally, shareInvoicePdf } from '../utils/pdfGenerator';
 import {
   Receipt,
   TrendingUp,
@@ -9,6 +10,7 @@ import {
   Package,
   Eye,
   MessageCircle,
+  FileDown,
   Banknote,
   QrCode,
   BookOpen,
@@ -86,12 +88,34 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
     return list;
   };
 
-  const getWhatsappUrl = (inv: Invoice) => {
-    const phone = inv.customerPhone?.replace(/[^0-9]/g, '') || '';
-    const target = phone.length === 10 ? `91${phone}` : phone;
-    const itemsSummary = inv.items?.map(it => `• ${it.quantity}x ${it.productName} - ₹${it.totalAmount}`).join('\n') || '';
-    const text = `🧾 *${tenant()?.name || 'Store'}*\nBill No: ${inv.invoiceNumber}\nDate: ${new Date(inv.createdAt).toLocaleDateString('en-IN')}\nCustomer: ${inv.customerName || 'Walk-in'}\n--------------------------\n${itemsSummary}\n--------------------------\nGrand Total: *₹${inv.grandTotal.toFixed(2)}*\nPayment: ${inv.paymentMode}\nThank you for shopping with us! 🙏`;
-    return `https://wa.me/${target}?text=${encodeURIComponent(text)}`;
+  const handleDownloadPdf = (inv: Invoice) => {
+    const t = tenant();
+    downloadInvoicePdfLocally(inv, {
+      name: t?.name,
+      legalName: t?.legalName,
+      address: t?.address,
+      city: t?.city,
+      phone: t?.phone,
+      gstin: t?.gstin,
+      hasGst: t?.hasGst,
+    });
+  };
+
+  const handleSharePdf = (inv: Invoice) => {
+    const t = tenant();
+    shareInvoicePdf(
+      inv,
+      {
+        name: t?.name,
+        legalName: t?.legalName,
+        address: t?.address,
+        city: t?.city,
+        phone: t?.phone,
+        gstin: t?.gstin,
+        hasGst: t?.hasGst,
+      },
+      inv.customerPhone
+    );
   };
 
   const paymentBadge = (mode: string) => {
@@ -342,24 +366,29 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                           {/* View & Reprint Receipt */}
                           <button
                             onClick={() => props.onSelectInvoice(inv)}
-                            title="View / Print Bill"
+                            title="View Thermal Receipt"
                             class="p-1.5 rounded-lg border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-colors"
                           >
                             <Eye class="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Send WhatsApp */}
-                          <Show when={inv.customerPhone}>
-                            <a
-                              href={getWhatsappUrl(inv)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={`Send Bill on WhatsApp to ${inv.customerPhone}`}
-                              class="p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors"
-                            >
-                              <MessageCircle class="w-3.5 h-3.5" />
-                            </a>
-                          </Show>
+                          {/* Download PDF Bill */}
+                          <button
+                            onClick={() => handleDownloadPdf(inv)}
+                            title="Download PDF Bill"
+                            class="p-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors"
+                          >
+                            <FileDown class="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Share WhatsApp (PDF) */}
+                          <button
+                            onClick={() => handleSharePdf(inv)}
+                            title={inv.customerPhone ? `Send PDF Bill to ${inv.customerPhone} on WhatsApp` : 'Share PDF Bill on WhatsApp'}
+                            class="p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors"
+                          >
+                            <MessageCircle class="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>

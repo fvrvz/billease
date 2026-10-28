@@ -15,7 +15,8 @@ class BillingService(
     tenantService: TenantService,
     couponService: LoyaltyCouponService,
     khataService: KhataService,
-    notificationService: NotificationService
+    notificationService: NotificationService,
+    pdfService: PdfService = new PdfService()
 ):
 
   def createInvoice(
@@ -317,6 +318,73 @@ class BillingService(
       ORDER BY total_revenue DESC
     """.query[SoldItemStats].to[List].transact(xa)
 
+  def getInvoiceById(tenantId: UUID, invoiceId: UUID): IO[Option[Invoice]] =
+    for
+      invOpt <- sql"""
+        SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
+               customer_phone, subtotal, item_discount_total, bill_discount_percent,
+               bill_discount_amount, coupon_code, coupon_discount_amount,
+               loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
+               cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
+               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               notes, created_at
+        FROM invoices
+        WHERE tenant_id = $tenantId AND id = $invoiceId
+      """.query[InvoiceRow].option.transact(xa)
+      res <- invOpt match
+        case None => IO.pure(None)
+        case Some(row) =>
+          sql"""
+            SELECT id, invoice_id, tenant_id, product_id, batch_id, product_name,
+                   quantity, unit, unit_price, mrp, discount_percent, discount_amount,
+                   gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount
+            FROM invoice_items
+            WHERE tenant_id = $tenantId AND invoice_id = $invoiceId
+          """.query[InvoiceItem].to[List].transact(xa).map(items => Some(row.toInvoice(items)))
+    yield res
+
+  def getInvoicePdf(tenantId: UUID, invoiceId: UUID): IO[Either[String, (String, Array[Byte])]] =
+    for
+      tenantOpt <- tenantService.getTenantById(tenantId)
+      invOpt <- getInvoiceById(tenantId, invoiceId)
+    yield (tenantOpt, invOpt) match
+      case (Some(tenant), Some(invoice)) =>
+        val bytes = pdfService.generateInvoicePdf(tenant, invoice, invoice.items)
+        Right((invoice.invoiceNumber, bytes))
+      case (None, _) => Left("Tenant not found")
+      case (_, None) => Left("Invoice not found")
+
+  def getPublicInvoicePdf(invoiceId: UUID): IO[Either[String, (String, Array[Byte])]] =
+    sql"""
+      SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
+             customer_phone, subtotal, item_discount_total, bill_discount_percent,
+             bill_discount_amount, coupon_code, coupon_discount_amount,
+             loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
+             cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
+             payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+             notes, created_at
+      FROM invoices
+      WHERE id = $invoiceId
+    """.query[InvoiceRow].option.transact(xa).flatMap {
+      case None => IO.pure(Left("Invoice not found"))
+      case Some(row) =>
+        for
+          tenantOpt <- tenantService.getTenantById(row.tenantId)
+          items <- sql"""
+            SELECT id, invoice_id, tenant_id, product_id, batch_id, product_name,
+                   quantity, unit, unit_price, mrp, discount_percent, discount_amount,
+                   gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount
+            FROM invoice_items
+            WHERE invoice_id = $invoiceId
+          """.query[InvoiceItem].to[List].transact(xa)
+        yield tenantOpt match
+          case None => Left("Tenant not found")
+          case Some(tenant) =>
+            val invoice = row.toInvoice(items)
+            val bytes = pdfService.generateInvoicePdf(tenant, invoice, items)
+            Right((invoice.invoiceNumber, bytes))
+    }
+
   def sendInvoiceWhatsapp(
       tenantId: UUID,
       invoiceId: UUID,
@@ -349,18 +417,21 @@ class BillingService(
       """.query[InvoiceItem].to[List].transact(xa)
 
       itemsText = items.map(it => s"• ${it.quantity}x ${it.productName} - ₹${it.totalAmount}").mkString("\n")
+      pdfUrl = s"http://localhost:8081/api/public/invoices/${invRow.id}/pdf"
 
       billText = customMsg.getOrElse(
         s"""🧾 *${tenant.name}*
-Bill No: ${invRow.invoiceNumber}
-Customer: ${invRow.customerName.getOrElse("Customer")}
+*Bill No:* ${invRow.invoiceNumber}
+*Customer:* ${invRow.customerName.getOrElse("Customer")}
 --------------------------
-Items:
+*Items:*
 $itemsText
 --------------------------
-Grand Total: *₹${invRow.grandTotal}*
-Payment Mode: ${invRow.paymentMode}
+*Grand Total:* *₹${invRow.grandTotal}* (${invRow.paymentMode})
 --------------------------
+📄 *Download Official PDF Bill:*
+$pdfUrl
+
 Thank you for shopping with us! 🙏"""
       )
 

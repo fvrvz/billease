@@ -151,6 +151,29 @@ class Routes(
     }
   }
 
+  val getInvoicePdfRoute = Endpoints.getInvoicePdfEndpoint.serverLogic { (tenantId, invoiceId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) =>
+            billingService.getInvoicePdf(tenantId, invoiceId).map {
+              case Right((invNum, bytes)) =>
+                Right(("application/pdf", Some(s"""inline; filename="Bill_${invNum}.pdf""""), bytes))
+              case Left(err) => Left(err)
+            }
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
+  val getPublicInvoicePdfRoute = Endpoints.getPublicInvoicePdfEndpoint.serverLogic { invoiceId =>
+    billingService.getPublicInvoicePdf(invoiceId).map {
+      case Right((invNum, bytes)) =>
+        Right(("application/pdf", Some(s"""inline; filename="Bill_${invNum}.pdf""""), bytes))
+      case Left(err) => Left(err)
+    }
+  }
+
   val listCustomersRoute = Endpoints.listCustomersEndpoint.serverLogic { (tenantId, token) =>
     requireAuth(token).flatMap {
       case Right(user) =>
@@ -242,6 +265,8 @@ class Routes(
     Endpoints.getSalesOverviewEndpoint,
     Endpoints.getSoldItemsEndpoint,
     Endpoints.sendInvoiceWhatsappEndpoint,
+    Endpoints.getInvoicePdfEndpoint,
+    Endpoints.getPublicInvoicePdfEndpoint,
     Endpoints.listCustomersEndpoint,
     Endpoints.createCustomerEndpoint,
     Endpoints.recordKhataPaymentEndpoint,
@@ -267,6 +292,8 @@ class Routes(
     getSalesOverviewRoute,
     getSoldItemsRoute,
     sendInvoiceWhatsappRoute,
+    getInvoicePdfRoute,
+    getPublicInvoicePdfRoute,
     listCustomersRoute,
     createCustomerRoute,
     recordKhataPaymentRoute,
