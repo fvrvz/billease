@@ -75,3 +75,4 @@ Every AI agent must honor the legal and financial rules governing Indian retail:
 - Take advantage of SolidJS fine-grained reactivity (`createSignal`, `createMemo`, `For`, `Show`).
 - Do not introduce heavy runtime UI dependencies; preserve the fast, lightweight sub-150kB bundle size for instantaneous POS counter response.
 - Maintain full keyboard accessibility (`F2` search, `F4` cash, `F5` UPI, `F6` Khata).
+

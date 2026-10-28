@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  db:
+  billease-db:
     image: postgres:16-alpine
     container_name: billease-db
     environment:
@@ -9,50 +7,64 @@ services:
       POSTGRES_USER: billease
       POSTGRES_PASSWORD: billease_secret
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - billease-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U billease -d billease"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  backend:
+  billease-backend:
+    image: billease-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: billease-backend
     environment:
-      DB_HOST: db
+      DB_HOST: billease-db
       DB_PORT: "5432"
       DB_NAME: billease
       DB_USER: billease
       DB_PASSWORD: billease_secret
-      OIDC_ENABLED: "false" # Set to "true" to activate runtime Keycloak/Auth0 verification
-      OIDC_ISSUER_URL: "https://auth.example.com/realms/billease"
-      OIDC_CLIENT_ID: "billease-app"
-      OIDC_JWKS_URL: "https://auth.example.com/realms/billease/protocol/openid-connect/certs"
+      # AuthForest OIDC Integration
+      OIDC_ENABLED: "true"
+      OIDC_ISSUER_URL: "http://localhost:8080"
+      OIDC_JWKS_URL: "http://authforest-backend-1:8080/.well-known/jwks.json"
+      OIDC_CLIENT_ID: "billease-web"
+      OIDC_AUDIENCE: "billease-api"
       WHATSAPP_ENABLED: "false"
       EMAIL_ENABLED: "false"
     ports:
-      - "8080:8080"
+      - "8081:8080"
+    networks:
+      - billease-net
+      - authforest_default
     depends_on:
-      db:
+      billease-db:
         condition: service_healthy
 
-  frontend:
+  billease-frontend:
+    image: billease-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: billease-frontend
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_URL=http://localhost:8080
+      - "3000:80"
+    networks:
+      - billease-net
     depends_on:
-      - backend
+      - billease-backend
 
 volumes:
   postgres_data:
 
+networks:
+  billease-net:
+    driver: bridge
+  authforest_default:
+    external: true

@@ -1,0 +1,13 @@
+.git
+.gitignore
+README.md
+AGENT.md
+.idea
+.vscode
+.DS_Store
+frontend/node_modules
+frontend/dist
+backend/target
+backend/project/target
+backend/project/project
+

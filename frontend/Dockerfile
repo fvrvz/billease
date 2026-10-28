@@ -1,14 +1,30 @@
-FROM node:24-alpine
+# ==========================================
+# Stage 1: Build SolidJS Frontend
+# ==========================================
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install
+COPY package.json ./
+RUN npm install
 
 COPY . .
+RUN npm run build
 
-EXPOSE 3000
-CMD ["pnpm", "dev", "--host"]
+# ==========================================
+# Stage 2: Production Nginx Server (<25MB)
+# ==========================================
+FROM nginx:alpine AS runner
 
+# Remove default nginx static assets
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy build artifacts from builder
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

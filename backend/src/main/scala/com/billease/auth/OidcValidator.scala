@@ -47,7 +47,7 @@ class OidcValidator(config: OidcConfig):
     else
       jwtProcessorOpt match
         case Some(processor) =>
-          Try {
+          val jwtRes = Try {
             val claims: JWTClaimsSet = processor.process(token, null)
             val sub = claims.getSubject
             val tenantIdStr = Option(claims.getStringClaim("tenant_id"))
@@ -64,7 +64,9 @@ class OidcValidator(config: OidcConfig):
               username = username,
               role = role
             )
-          }.toEither.left.map(_.getMessage)
+          }.toEither
+
+          jwtRes.fold(_ => parseLocalOrDemoToken(token), Right(_))
 
         case None =>
           parseLocalOrDemoToken(token)

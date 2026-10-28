@@ -3,27 +3,71 @@ package com.billease.domain
 import io.circe.Codec
 import java.time.{LocalDate, Instant}
 import java.util.UUID
+import doobie.util.meta.Meta
+import sttp.tapir.Schema
+import scala.util.Try
 
-enum Role derives Codec.AsObject:
+private def enumCodec[T <: reflect.Enum](valueOf: String => T): Codec[T] =
+  Codec.from(
+    io.circe.Decoder.decodeString.emap(s => Try(valueOf(s)).toEither.left.map(_.getMessage)),
+    io.circe.Encoder.encodeString.contramap(_.toString)
+  )
+
+enum Role:
   case SUPER_ADMIN, STORE_ADMIN, MANAGER, CASHIER
 
-enum InvoiceType derives Codec.AsObject:
+object Role:
+  given Meta[Role] = Meta[String].imap(s => Try(Role.valueOf(s)).getOrElse(Role.CASHIER))(_.toString)
+  given Schema[Role] = Schema.string
+  given Codec[Role] = enumCodec(Role.valueOf)
+
+enum InvoiceType:
   case TAX_INVOICE, RETAIL_BILL
 
-enum PaymentMode derives Codec.AsObject:
+object InvoiceType:
+  given Meta[InvoiceType] = Meta[String].imap(s => Try(InvoiceType.valueOf(s)).getOrElse(InvoiceType.RETAIL_BILL))(_.toString)
+  given Schema[InvoiceType] = Schema.string
+  given Codec[InvoiceType] = enumCodec(InvoiceType.valueOf)
+
+enum PaymentMode:
   case CASH, UPI, CARD, CREDIT_KHATA, SPLIT
 
-enum DiscountType derives Codec.AsObject:
+object PaymentMode:
+  given Meta[PaymentMode] = Meta[String].imap(s => Try(PaymentMode.valueOf(s)).getOrElse(PaymentMode.CASH))(_.toString)
+  given Schema[PaymentMode] = Schema.string
+  given Codec[PaymentMode] = enumCodec(PaymentMode.valueOf)
+
+enum DiscountType:
   case PERCENTAGE, FLAT
 
-enum KhataEntryType derives Codec.AsObject:
+object DiscountType:
+  given Meta[DiscountType] = Meta[String].imap(s => Try(DiscountType.valueOf(s)).getOrElse(DiscountType.PERCENTAGE))(_.toString)
+  given Schema[DiscountType] = Schema.string
+  given Codec[DiscountType] = enumCodec(DiscountType.valueOf)
+
+enum KhataEntryType:
   case BILL_CREDIT, PAYMENT_RECEIVED, ADJUSTMENT
 
-enum AlertType derives Codec.AsObject:
+object KhataEntryType:
+  given Meta[KhataEntryType] = Meta[String].imap(s => Try(KhataEntryType.valueOf(s)).getOrElse(KhataEntryType.ADJUSTMENT))(_.toString)
+  given Schema[KhataEntryType] = Schema.string
+  given Codec[KhataEntryType] = enumCodec(KhataEntryType.valueOf)
+
+enum AlertType:
   case LOW_STOCK, OUT_OF_STOCK, NEAR_EXPIRY
 
-enum AlertChannel derives Codec.AsObject:
+object AlertType:
+  given Meta[AlertType] = Meta[String].imap(s => Try(AlertType.valueOf(s)).getOrElse(AlertType.LOW_STOCK))(_.toString)
+  given Schema[AlertType] = Schema.string
+  given Codec[AlertType] = enumCodec(AlertType.valueOf)
+
+enum AlertChannel:
   case WHATSAPP, EMAIL
+
+object AlertChannel:
+  given Meta[AlertChannel] = Meta[String].imap(s => Try(AlertChannel.valueOf(s)).getOrElse(AlertChannel.EMAIL))(_.toString)
+  given Schema[AlertChannel] = Schema.string
+  given Codec[AlertChannel] = enumCodec(AlertChannel.valueOf)
 
 // Tenant (Store)
 case class Tenant(
@@ -247,26 +291,26 @@ case class CouponValidationResult(
 // Billing & Invoices
 case class InvoiceItemInput(
     productId: UUID,
-    batchId: Option[UUID],
+    batchId: Option[UUID] = None,
     productName: String,
     quantity: BigDecimal,
     unitPrice: BigDecimal,
     mrp: BigDecimal,
-    discountPercent: BigDecimal = BigDecimal(0),
-    gstRate: BigDecimal = BigDecimal(0)
+    discountPercent: Option[BigDecimal] = None,
+    gstRate: Option[BigDecimal] = None
 ) derives Codec.AsObject
 
 case class CreateInvoiceRequest(
-    customerId: Option[UUID],
-    customerName: Option[String],
-    customerPhone: Option[String],
+    customerId: Option[UUID] = None,
+    customerName: Option[String] = None,
+    customerPhone: Option[String] = None,
     items: List[InvoiceItemInput],
-    billDiscountPercent: BigDecimal = BigDecimal(0),
-    billDiscountAmount: BigDecimal = BigDecimal(0),
+    billDiscountPercent: Option[BigDecimal] = None,
+    billDiscountAmount: Option[BigDecimal] = None,
     couponCode: Option[String] = None,
-    redeemLoyaltyPoints: BigDecimal = BigDecimal(0),
-    paymentMode: PaymentMode = PaymentMode.CASH,
-    cashTendered: BigDecimal = BigDecimal(0),
+    redeemLoyaltyPoints: Option[BigDecimal] = None,
+    paymentMode: Option[PaymentMode] = None,
+    cashTendered: Option[BigDecimal] = None,
     notes: Option[String] = None
 ) derives Codec.AsObject
 
@@ -289,6 +333,69 @@ case class InvoiceItem(
     igstAmount: BigDecimal,
     totalAmount: BigDecimal
 ) derives Codec.AsObject
+
+case class InvoiceRow(
+    id: UUID,
+    tenantId: UUID,
+    invoiceNumber: String,
+    invoiceType: InvoiceType,
+    customerId: Option[UUID],
+    customerName: Option[String],
+    customerPhone: Option[String],
+    subtotal: BigDecimal,
+    itemDiscountTotal: BigDecimal,
+    billDiscountPercent: BigDecimal,
+    billDiscountAmount: BigDecimal,
+    couponCode: Option[String],
+    couponDiscountAmount: BigDecimal,
+    loyaltyPointsRedeemed: BigDecimal,
+    loyaltyDiscountAmount: BigDecimal,
+    taxableAmount: BigDecimal,
+    cgstAmount: BigDecimal,
+    sgstAmount: BigDecimal,
+    igstAmount: BigDecimal,
+    roundOff: BigDecimal,
+    grandTotal: BigDecimal,
+    paymentMode: PaymentMode,
+    cashTendered: BigDecimal,
+    changeReturned: BigDecimal,
+    cashierId: Option[UUID],
+    cashierName: Option[String],
+    notes: Option[String],
+    createdAt: Instant
+) derives Codec.AsObject:
+  def toInvoice(items: List[InvoiceItem] = Nil): Invoice =
+    Invoice(
+      id = id,
+      tenantId = tenantId,
+      invoiceNumber = invoiceNumber,
+      invoiceType = invoiceType,
+      customerId = customerId,
+      customerName = customerName,
+      customerPhone = customerPhone,
+      subtotal = subtotal,
+      itemDiscountTotal = itemDiscountTotal,
+      billDiscountPercent = billDiscountPercent,
+      billDiscountAmount = billDiscountAmount,
+      couponCode = couponCode,
+      couponDiscountAmount = couponDiscountAmount,
+      loyaltyPointsRedeemed = loyaltyPointsRedeemed,
+      loyaltyDiscountAmount = loyaltyDiscountAmount,
+      taxableAmount = taxableAmount,
+      cgstAmount = cgstAmount,
+      sgstAmount = sgstAmount,
+      igstAmount = igstAmount,
+      roundOff = roundOff,
+      grandTotal = grandTotal,
+      paymentMode = paymentMode,
+      cashTendered = cashTendered,
+      changeReturned = changeReturned,
+      cashierId = cashierId,
+      cashierName = cashierName,
+      notes = notes,
+      createdAt = createdAt,
+      items = items
+    )
 
 case class Invoice(
     id: UUID,

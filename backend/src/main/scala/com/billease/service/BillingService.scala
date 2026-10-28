@@ -24,32 +24,40 @@ class BillingService(
       cashierName: String,
       req: CreateInvoiceRequest
   ): IO[Invoice] =
+    val billDiscPct = req.billDiscountPercent.getOrElse(BigDecimal(0))
+    val billDiscAmtReq = req.billDiscountAmount.getOrElse(BigDecimal(0))
+    val redeemPoints = req.redeemLoyaltyPoints.getOrElse(BigDecimal(0))
+    val payMode = req.paymentMode.getOrElse(PaymentMode.CASH)
+    val cashTendered = req.cashTendered.getOrElse(BigDecimal(0))
+
     for
       tenantOpt <- tenantService.getTenantById(tenantId)
       tenant = tenantOpt.getOrElse(throw new RuntimeException("Tenant not found"))
 
       // 1. Calculate raw item totals & taxes
       lineItemsCalculated = req.items.map { item =>
-        val itemDiscAmount = (item.unitPrice * item.quantity * item.discountPercent / BigDecimal(100)).setScale(2, RM.HALF_UP)
+        val discPct = item.discountPercent.getOrElse(BigDecimal(0))
+        val gst = item.gstRate.getOrElse(BigDecimal(0))
+        val itemDiscAmount = (item.unitPrice * item.quantity * discPct / BigDecimal(100)).setScale(2, RM.HALF_UP)
         val tax = GstCalculator.calculateItemTax(
           priceUnit = item.unitPrice,
           quantity = item.quantity,
           discountAmount = itemDiscAmount,
-          gstRate = item.gstRate,
+          gstRate = gst,
           isPriceTaxInclusive = true,
           hasStoreGst = tenant.hasGst,
           isInterState = false
         )
-        (item, itemDiscAmount, tax)
+        (item, discPct, gst, itemDiscAmount, tax)
       }
 
-      rawSubtotal = lineItemsCalculated.map(_._3.totalAmount).sum
-      itemDiscTotal = lineItemsCalculated.map(_._2).sum
+      rawSubtotal = lineItemsCalculated.map(_._5.totalAmount).sum
+      itemDiscTotal = lineItemsCalculated.map(_._4).sum
 
       // 2. Bill level discount
-      billDiscAmount = if req.billDiscountPercent > BigDecimal(0) then
-        (rawSubtotal * req.billDiscountPercent / BigDecimal(100)).setScale(2, RM.HALF_UP)
-      else req.billDiscountAmount
+      billDiscAmount = if billDiscPct > BigDecimal(0) then
+        (rawSubtotal * billDiscPct / BigDecimal(100)).setScale(2, RM.HALF_UP)
+      else billDiscAmtReq
 
       // 3. Coupon validation & discount
       couponResult <- req.couponCode match
@@ -59,7 +67,7 @@ class BillingService(
       couponDiscAmt = if couponResult.isValid then couponResult.discountAmount else BigDecimal(0)
 
       // 4. Loyalty points redemption
-      loyaltyDiscAmt = (req.redeemLoyaltyPoints * tenant.loyaltyPointValueRs).setScale(2, RM.HALF_UP)
+      loyaltyDiscAmt = (redeemPoints * tenant.loyaltyPointValueRs).setScale(2, RM.HALF_UP)
 
       // 5. Final totals & Round-off
       tentativeTotal = (rawSubtotal - billDiscAmount - couponDiscAmt - loyaltyDiscAmt).max(BigDecimal(0))
@@ -67,17 +75,17 @@ class BillingService(
       roundOff = roundedGrandTotal - tentativeTotal
 
       // Tax breakdown totals
-      taxableTotal = lineItemsCalculated.map(_._3.taxableAmount).sum
-      cgstTotal = lineItemsCalculated.map(_._3.cgstAmount).sum
-      sgstTotal = lineItemsCalculated.map(_._3.sgstAmount).sum
-      igstTotal = lineItemsCalculated.map(_._3.igstAmount).sum
+      taxableTotal = lineItemsCalculated.map(_._5.taxableAmount).sum
+      cgstTotal = lineItemsCalculated.map(_._5.cgstAmount).sum
+      sgstTotal = lineItemsCalculated.map(_._5.sgstAmount).sum
+      igstTotal = lineItemsCalculated.map(_._5.igstAmount).sum
 
       invoiceId = UUID.randomUUID()
       invoiceNum = s"${tenant.invoicePrefix}-${System.currentTimeMillis() % 1000000}"
       invType = if tenant.hasGst then InvoiceType.TAX_INVOICE else InvoiceType.RETAIL_BILL
 
-      change = if req.paymentMode == PaymentMode.CASH && req.cashTendered > roundedGrandTotal then
-        req.cashTendered - roundedGrandTotal
+      change = if payMode == PaymentMode.CASH && cashTendered > roundedGrandTotal then
+        cashTendered - roundedGrandTotal
       else BigDecimal(0)
 
       now = Instant.now()
@@ -95,16 +103,16 @@ class BillingService(
         ) VALUES (
           $invoiceId, $tenantId, $invoiceNum, ${invType.toString}, ${req.customerId},
           ${req.customerName}, ${req.customerPhone}, $rawSubtotal, $itemDiscTotal,
-          ${req.billDiscountPercent}, $billDiscAmount, ${req.couponCode}, $couponDiscAmt,
-          ${req.redeemLoyaltyPoints}, $loyaltyDiscAmt, $taxableTotal,
+          $billDiscPct, $billDiscAmount, ${req.couponCode}, $couponDiscAmt,
+          $redeemPoints, $loyaltyDiscAmt, $taxableTotal,
           $cgstTotal, $sgstTotal, $igstTotal, $roundOff, $roundedGrandTotal,
-          ${req.paymentMode.toString}, ${req.cashTendered}, $change, $cashierId,
+          ${payMode.toString}, $cashTendered, $change, $cashierId,
           $cashierName, ${req.notes}, $now
         )
       """.update.run.transact(xa)
 
       // 7. Persist Line Items & Deduct Stock
-      savedItems <- lineItemsCalculated.traverse { case (item, discAmt, tax) =>
+      savedItems <- lineItemsCalculated.traverse { case (item, discPct, gst, discAmt, tax) =>
         val itemId = UUID.randomUUID()
         val insertItem = sql"""
           INSERT INTO invoice_items (
@@ -114,7 +122,7 @@ class BillingService(
           ) VALUES (
             $itemId, $invoiceId, $tenantId, ${item.productId}, ${item.batchId},
             ${item.productName}, ${item.quantity}, 'PCS', ${item.unitPrice},
-            ${item.mrp}, ${item.discountPercent}, $discAmt, ${item.gstRate},
+            ${item.mrp}, $discPct, $discAmt, $gst,
             ${tax.cgstAmount}, ${tax.sgstAmount}, ${tax.igstAmount}, ${tax.totalAmount}
           )
         """.update.run
@@ -150,9 +158,9 @@ class BillingService(
             unit = "PCS",
             unitPrice = item.unitPrice,
             mrp = item.mrp,
-            discountPercent = item.discountPercent,
+            discountPercent = discPct,
             discountAmount = discAmt,
-            gstRate = item.gstRate,
+            gstRate = gst,
             cgstAmount = tax.cgstAmount,
             sgstAmount = tax.sgstAmount,
             igstAmount = tax.igstAmount,
@@ -162,7 +170,7 @@ class BillingService(
       }
 
       // 8. Handle Udhaar / Customer Khata Credit
-      _ <- (req.customerId, req.paymentMode) match
+      _ <- (req.customerId, payMode) match
         case (Some(custId), PaymentMode.CREDIT_KHATA) =>
           val ledgerId = UUID.randomUUID()
           sql"""
@@ -185,7 +193,7 @@ class BillingService(
       _ <- req.customerId match
         case Some(custId) =>
           val pointsEarned = ((roundedGrandTotal / BigDecimal(100)) * tenant.loyaltyPointsPer100).setScale(2, RM.HALF_UP)
-          val netPointsChange = pointsEarned - req.redeemLoyaltyPoints
+          val netPointsChange = pointsEarned - redeemPoints
           sql"""
             UPDATE customers
             SET loyalty_points = GREATEST(0, loyalty_points + $netPointsChange)
@@ -231,11 +239,11 @@ class BillingService(
       customerPhone = req.customerPhone,
       subtotal = rawSubtotal,
       itemDiscountTotal = itemDiscTotal,
-      billDiscountPercent = req.billDiscountPercent,
+      billDiscountPercent = billDiscPct,
       billDiscountAmount = billDiscAmount,
       couponCode = req.couponCode,
       couponDiscountAmount = couponDiscAmt,
-      loyaltyPointsRedeemed = req.redeemLoyaltyPoints,
+      loyaltyPointsRedeemed = redeemPoints,
       loyaltyDiscountAmount = loyaltyDiscAmt,
       taxableAmount = taxableTotal,
       cgstAmount = cgstTotal,
@@ -243,8 +251,8 @@ class BillingService(
       igstAmount = igstTotal,
       roundOff = roundOff,
       grandTotal = roundedGrandTotal,
-      paymentMode = req.paymentMode,
-      cashTendered = req.cashTendered,
+      paymentMode = payMode,
+      cashTendered = cashTendered,
       changeReturned = change,
       cashierId = Some(cashierId),
       cashierName = Some(cashierName),
@@ -266,5 +274,5 @@ class BillingService(
       WHERE tenant_id = $tenantId
       ORDER BY created_at DESC
       LIMIT $limit
-    """.query[Invoice].to[List].transact(xa)
+    """.query[InvoiceRow].to[List].transact(xa).map(_.map(_.toInvoice()))
 

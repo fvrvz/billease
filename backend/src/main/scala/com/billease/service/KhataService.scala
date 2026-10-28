@@ -1,6 +1,7 @@
 package com.billease.service
 
 import cats.effect.IO
+import cats.syntax.all.*
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*

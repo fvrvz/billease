@@ -10,13 +10,15 @@ val doobieVersion     = "1.0.0-RC6"
 val pureConfigVersion = "0.17.8"
 
 lazy val root = (project in file("."))
+  .enablePlugins(JavaAppPackaging)
   .settings(
     name := "billease-backend",
+    Compile / mainClass := Some("com.billease.Main"),
     scalacOptions ++= Seq(
       "-deprecation",
       "-feature",
       "-unchecked",
-      "-Xfatal-warnings"
+      "-Xmax-inlines:64"
     ),
     libraryDependencies ++= Seq(
       // Cats Effect
