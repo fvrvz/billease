@@ -185,6 +185,18 @@ class Routes(
     couponService.validateCoupon(tenantId, req.code, req.cartTotal).map(Right(_))
   }
 
+  val toggleCouponRoute = Endpoints.toggleCouponEndpoint.serverLogic { (tenantId, couponId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) if user.role != Role.CASHIER =>
+            couponService.toggleCoupon(tenantId, couponId).map(Right(_))
+          case Right(_) => IO.pure(Left("Cashiers cannot toggle coupons"))
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
   val allEndpoints = List(
     Endpoints.loginEndpoint,
     Endpoints.listTenantsEndpoint,
@@ -201,7 +213,8 @@ class Routes(
     Endpoints.getCustomerLedgerEndpoint,
     Endpoints.listCouponsEndpoint,
     Endpoints.createCouponEndpoint,
-    Endpoints.validateCouponEndpoint
+    Endpoints.validateCouponEndpoint,
+    Endpoints.toggleCouponEndpoint
   )
 
   val swaggerEndpoints = SwaggerInterpreter().fromEndpoints[IO](allEndpoints, "Billease API", "1.0.0")
@@ -222,7 +235,8 @@ class Routes(
     getCustomerLedgerRoute,
     listCouponsRoute,
     createCouponRoute,
-    validateCouponRoute
+    validateCouponRoute,
+    toggleCouponRoute
   ) ++ swaggerEndpoints
 
   val httpRoutes: HttpRoutes[IO] = Http4sServerInterpreter[IO]().toRoutes(allServerEndpoints)
