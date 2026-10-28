@@ -1,5 +1,6 @@
 import { Component, createSignal, onMount, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
+import { DecodedOidcClaims } from '../types';
 import { Shield, KeyRound, ExternalLink, Check, AlertCircle, RefreshCw } from 'lucide-solid';
 
 interface OidcAuthModalProps {
@@ -16,7 +17,7 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
     localStorage.getItem('authforest_client_id') || 'billease-web'
   );
   const [pastedJwt, setPastedJwt] = createSignal('');
-  const [jwtParseResult, setJwtParseResult] = createSignal<any | null>(null);
+  const [jwtParseResult, setJwtParseResult] = createSignal<DecodedOidcClaims | null>(null);
   const [parseError, setParseError] = createSignal<string | null>(null);
 
   // Parse JWT payload on input
@@ -31,14 +32,15 @@ export const OidcAuthModal: Component<OidcAuthModalProps> = (props) => {
     try {
       const parts = token.trim().split('.');
       if (parts.length >= 2) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const payload: DecodedOidcClaims = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         setJwtParseResult(payload);
       } else {
         setParseError('Token must be in JWT format (header.payload.signature)');
         setJwtParseResult(null);
       }
-    } catch (err: any) {
-      setParseError('Failed to parse JWT payload: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setParseError('Failed to parse JWT payload: ' + message);
       setJwtParseResult(null);
     }
   };

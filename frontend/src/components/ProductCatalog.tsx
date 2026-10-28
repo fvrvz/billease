@@ -79,8 +79,9 @@ export const ProductCatalog: Component = () => {
       setExpiryDate('');
       setShowAddModal(false);
       loadProducts();
-    } catch (err: any) {
-      alert(err.message || 'Failed to create product');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create product';
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }

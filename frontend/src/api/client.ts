@@ -1,4 +1,17 @@
-import { Tenant, User, Product, Customer, Coupon, Invoice, CartItem, PaymentMode } from '../types';
+import {
+  Tenant,
+  User,
+  Product,
+  Customer,
+  Coupon,
+  Invoice,
+  InvoiceItem,
+  ProductCreateInput,
+  CustomerCreateInput,
+  CouponCreateInput,
+  InvoiceCreateInput,
+  InvoiceItemInput
+} from '../types';
 
 const API_BASE = '/api';
 
@@ -24,7 +37,7 @@ export const apiClient = {
       if (res.ok) return await res.json();
     } catch (_) {}
     const current = getFallbackTenant();
-    const updated = { ...current, ...updates };
+    const updated: Tenant = { ...current, ...updates };
     localStorage.setItem('billease_tenant', JSON.stringify(updated));
     return updated;
   },
@@ -38,7 +51,7 @@ export const apiClient = {
     return getFallbackProducts(query);
   },
 
-  async createProduct(tenantId: string, token: string, product: any): Promise<Product> {
+  async createProduct(tenantId: string, token: string, product: ProductCreateInput): Promise<Product> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/products`, {
         method: 'POST',
@@ -82,7 +95,7 @@ export const apiClient = {
     return getFallbackCustomers();
   },
 
-  async createCustomer(tenantId: string, token: string, customer: any): Promise<Customer> {
+  async createCustomer(tenantId: string, token: string, customer: CustomerCreateInput): Promise<Customer> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers`, {
         method: 'POST',
@@ -143,7 +156,7 @@ export const apiClient = {
     return getFallbackCoupons();
   },
 
-  async createCoupon(tenantId: string, token: string, coupon: any): Promise<Coupon> {
+  async createCoupon(tenantId: string, token: string, coupon: CouponCreateInput): Promise<Coupon> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons`, {
         method: 'POST',
@@ -201,7 +214,7 @@ export const apiClient = {
     return { isValid: true, discountAmount: discount, message: `Coupon applied! Saved ₹${discount}` };
   },
 
-  async createInvoice(tenantId: string, token: string, invoiceData: any): Promise<Invoice> {
+  async createInvoice(tenantId: string, token: string, invoiceData: InvoiceCreateInput): Promise<Invoice> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices`, {
         method: 'POST',
@@ -216,12 +229,12 @@ export const apiClient = {
 
     // Offline / Mock calculation
     const tenant = getFallbackTenant();
-    const subtotal = invoiceData.items.reduce((acc: number, it: any) => acc + (it.unitPrice * it.quantity), 0);
-    const itemDiscTotal = invoiceData.items.reduce((acc: number, it: any) => {
+    const subtotal = invoiceData.items.reduce((acc: number, it: InvoiceItemInput) => acc + (it.unitPrice * it.quantity), 0);
+    const itemDiscTotal = invoiceData.items.reduce((acc: number, it: InvoiceItemInput) => {
       const disc = (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100;
       return acc + disc;
     }, 0);
-    const billDiscAmt = invoiceData.billDiscountPercent > 0 
+    const billDiscAmt = (invoiceData.billDiscountPercent && invoiceData.billDiscountPercent > 0)
       ? (subtotal * invoiceData.billDiscountPercent) / 100 
       : (invoiceData.billDiscountAmount || 0);
     const couponDiscAmt = invoiceData.couponDiscountAmount || 0;
@@ -231,7 +244,7 @@ export const apiClient = {
     const grandTotal = Math.round(netBeforeRound);
     const roundOff = Math.round((grandTotal - netBeforeRound) * 100) / 100;
 
-    const invItems = invoiceData.items.map((it: any, idx: number) => {
+    const invItems: InvoiceItem[] = invoiceData.items.map((it: InvoiceItemInput, idx: number) => {
       const lineTotal = it.unitPrice * it.quantity * (1 - (it.discountPercent || 0)/100);
       const taxRate = tenant.hasGst ? (it.gstRate || 0) : 0;
       const divisor = 1 + (taxRate / 100);
@@ -259,9 +272,9 @@ export const apiClient = {
       };
     });
 
-    const totalCgst = invItems.reduce((acc: number, it: any) => acc + it.cgstAmount, 0);
-    const totalSgst = invItems.reduce((acc: number, it: any) => acc + it.sgstAmount, 0);
-    const totalTaxable = invItems.reduce((acc: number, it: any) => acc + (it.totalAmount - (it.cgstAmount + it.sgstAmount)), 0);
+    const totalCgst = invItems.reduce((acc: number, it: InvoiceItem) => acc + it.cgstAmount, 0);
+    const totalSgst = invItems.reduce((acc: number, it: InvoiceItem) => acc + it.sgstAmount, 0);
+    const totalTaxable = invItems.reduce((acc: number, it: InvoiceItem) => acc + (it.totalAmount - (it.cgstAmount + it.sgstAmount)), 0);
 
     const invoice: Invoice = {
       id: 'inv-' + Date.now(),
@@ -306,7 +319,7 @@ export const apiClient = {
 
     // Deduct local product stock
     const prods = getFallbackProducts();
-    invoiceData.items.forEach((it: any) => {
+    invoiceData.items.forEach((it: InvoiceItemInput) => {
       const p = prods.find(x => x.id === it.productId);
       if (p) {
         p.currentStock = Math.max(0, p.currentStock - it.quantity);
@@ -497,4 +510,3 @@ function getFallbackCoupons(): Coupon[] {
     }
   ];
 }
-

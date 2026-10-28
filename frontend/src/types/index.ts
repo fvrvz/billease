@@ -58,6 +58,22 @@ export interface Product {
   sellingPrice: number;
 }
 
+export interface ProductCreateInput {
+  name: string;
+  barcode?: string;
+  sku?: string;
+  unit?: string;
+  hsnCode?: string;
+  gstRate?: number;
+  isPriceTaxInclusive?: boolean;
+  mrp: number;
+  costPrice?: number;
+  sellingPrice: number;
+  initialQuantity?: number;
+  minStockAlert?: number;
+  expiryDate?: string;
+}
+
 export interface Customer {
   id: string;
   tenantId: string;
@@ -68,6 +84,14 @@ export interface Customer {
   creditLimit: number;
   currentDue: number;
   loyaltyPoints: number;
+}
+
+export interface CustomerCreateInput {
+  name: string;
+  phone: string;
+  gstin?: string;
+  address?: string;
+  creditLimit?: number;
 }
 
 export interface Coupon {
@@ -84,10 +108,45 @@ export interface Coupon {
   isActive: boolean;
 }
 
+export interface CouponCreateInput {
+  code: string;
+  discountType: DiscountType;
+  discountValue: number;
+  minOrderAmount?: number;
+  maxDiscountCap?: number;
+  validUntil?: string;
+  maxUsage?: number;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;
   discountPercent: number;
+}
+
+export interface InvoiceItemInput {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  mrp?: number;
+  discountPercent?: number;
+  gstRate?: number;
+}
+
+export interface InvoiceCreateInput {
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  items: InvoiceItemInput[];
+  billDiscountPercent?: number;
+  billDiscountAmount?: number;
+  couponCode?: string;
+  couponDiscountAmount?: number;
+  redeemLoyaltyPoints?: number;
+  paymentMode: PaymentMode;
+  cashTendered?: number;
+  notes?: string;
 }
 
 export interface InvoiceItem {
@@ -140,3 +199,16 @@ export interface Invoice {
   items?: InvoiceItem[];
 }
 
+export interface DecodedOidcClaims {
+  sub: string;
+  name?: string;
+  preferred_username?: string;
+  email?: string;
+  role?: string;
+  roles?: string[];
+  realm_access?: { roles?: string[] };
+  tenant_id?: string;
+  exp?: number;
+  iat?: number;
+  iss?: string;
+}
