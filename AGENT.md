@@ -76,3 +76,29 @@ Every AI agent must honor the legal and financial rules governing Indian retail:
 - Do not introduce heavy runtime UI dependencies; preserve the fast, lightweight sub-150kB bundle size for instantaneous POS counter response.
 - Maintain full keyboard accessibility (`F2` search, `F4` cash, `F5` UPI, `F6` Khata).
 
+---
+
+## 🌿 7. Git Workflow, Branch Protection & Conventional Commits
+All contributors and AI agents must strictly comply with the repository branching and PR policies enforced via GitHub branch protection, rulesets, and CI guards:
+
+1. **Branch Protection**:
+   - `main`: Production release branch.
+     - **Direct pushes and force pushes are strictly disabled.**
+     - **PRs can only originate from `develop` or `hotfix/*` branches.**
+   - `develop`: Integration branch.
+     - **Direct pushes and force pushes are strictly disabled.**
+     - **All PRs must originate from conventional branches**: `feature/*`, `bugfix/*`, `hotfix/*`, `docs/*`, `refactor/*`, `chore/*`, `test/*`.
+2. **Conventional Commits**:
+   - All commit messages and PR titles must strictly follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+     ```
+     <type>(<scope>): <short description>
+     ```
+   - **Allowed Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+   - Examples:
+     - `feat(pos): add dynamic upi qr modal`
+     - `fix(khata): prevent negative credit limit`
+     - `docs(api): update swagger instructions`
+3. **Automated CI Policy Enforcement**:
+   - The status check `validate-pr-policy` runs on all PRs targeting `main` and `develop` and must pass before merging.
+
+
