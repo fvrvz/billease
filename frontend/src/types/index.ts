@@ -221,3 +221,22 @@ export interface AuthForestTokenResponse {
   scope?: string;
   id_token?: string;
 }
+
+export interface LoginResponse {
+  token: string;
+  user: {
+    id: string;
+    tenantId?: string;
+    username: string;
+    fullName: string;
+    email?: string;
+    phone?: string;
+    role: string;
+    isActive: boolean;
+  };
+  tenant?: {
+    id: string;
+    name: string;
+    [key: string]: unknown;
+  };
+}

@@ -93,3 +93,4 @@ jobs:
             exit 1
           fi
           echo "✅ All commits follow Conventional Commits format."
+

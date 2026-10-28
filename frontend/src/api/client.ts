@@ -9,12 +9,25 @@ import {
   CustomerCreateInput,
   CouponCreateInput,
   InvoiceCreateInput,
-  InvoiceItemInput
+  InvoiceItemInput,
+  LoginResponse
 } from '../types';
 
 const API_BASE = '/api';
 
 export const apiClient = {
+  async login(username: string, password: string): Promise<LoginResponse | null> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) return (await res.json()) as LoginResponse;
+    } catch (_) {}
+    return null;
+  },
+
   async getTenant(tenantId: string): Promise<Tenant> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}`);
@@ -211,6 +224,25 @@ export const apiClient = {
     }
     discount = Math.round(discount * 100) / 100;
     return { isValid: true, discountAmount: discount, message: `Coupon applied! Saved ₹${discount}` };
+  },
+
+  async toggleCoupon(tenantId: string, couponId: string, token: string): Promise<Coupon | null> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons/${couponId}/toggle`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as Coupon | null;
+    } catch (_) {}
+    // Offline fallback: toggle in localStorage
+    const coupons = getFallbackCoupons();
+    const idx = coupons.findIndex(c => c.id === couponId);
+    if (idx >= 0) {
+      coupons[idx] = { ...coupons[idx], isActive: !coupons[idx].isActive };
+      localStorage.setItem('billease_coupons', JSON.stringify(coupons));
+      return coupons[idx];
+    }
+    return null;
   },
 
   async createInvoice(tenantId: string, token: string, invoiceData: InvoiceCreateInput): Promise<Invoice> {

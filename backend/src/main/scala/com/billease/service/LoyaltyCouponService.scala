@@ -16,9 +16,23 @@ class LoyaltyCouponService(xa: Transactor[IO]):
       SELECT id, tenant_id, code, discount_type, discount_value, min_order_amount,
              max_discount_cap, valid_until, usage_count, max_usage, is_active
       FROM coupons
-      WHERE tenant_id = $tenantId AND is_active = true
-      ORDER BY created_at DESC
+      WHERE tenant_id = $tenantId
+      ORDER BY is_active DESC, code ASC
     """.query[Coupon].to[List].transact(xa)
+
+  def toggleCoupon(tenantId: UUID, couponId: UUID): IO[Option[Coupon]] =
+    sql"""
+      UPDATE coupons
+      SET is_active = NOT is_active
+      WHERE tenant_id = $tenantId AND id = $couponId
+    """.update.run.transact(xa).flatMap { rows =>
+      if rows == 0 then IO.pure(None)
+      else sql"""
+        SELECT id, tenant_id, code, discount_type, discount_value, min_order_amount,
+               max_discount_cap, valid_until, usage_count, max_usage, is_active
+        FROM coupons WHERE id = $couponId
+      """.query[Coupon].option.transact(xa)
+    }
 
   def createCoupon(tenantId: UUID, req: CouponCreate): IO[Coupon] =
     val id = UUID.randomUUID()
