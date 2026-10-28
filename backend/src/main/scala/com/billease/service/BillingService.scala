@@ -261,18 +261,109 @@ class BillingService(
       items = savedItems
     )
 
-  def listRecentInvoices(tenantId: UUID, limit: Int = 20): IO[List[Invoice]] =
+  def listRecentInvoices(tenantId: UUID, limit: Int = 100): IO[List[Invoice]] =
+    for
+      invRows <- sql"""
+        SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
+               customer_phone, subtotal, item_discount_total, bill_discount_percent,
+               bill_discount_amount, coupon_code, coupon_discount_amount,
+               loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
+               cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
+               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               notes, created_at
+        FROM invoices
+        WHERE tenant_id = $tenantId
+        ORDER BY created_at DESC
+        LIMIT $limit
+      """.query[InvoiceRow].to[List].transact(xa)
+
+      itemsList <- sql"""
+        SELECT id, invoice_id, tenant_id, product_id, batch_id, product_name,
+               quantity, unit, unit_price, mrp, discount_percent, discount_amount,
+               gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount
+        FROM invoice_items
+        WHERE tenant_id = $tenantId
+      """.query[InvoiceItem].to[List].transact(xa)
+
+      itemsByInvoice = itemsList.groupBy(_.invoiceId)
+    yield invRows.map(r => r.toInvoice(itemsByInvoice.getOrElse(r.id, Nil)))
+
+  def getSalesOverview(tenantId: UUID): IO[SalesOverview] =
     sql"""
-      SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
-             customer_phone, subtotal, item_discount_total, bill_discount_percent,
-             bill_discount_amount, coupon_code, coupon_discount_amount,
-             loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
-             cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-             payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
-             notes, created_at
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as total_sales,
+        COUNT(id) as total_invoices,
+        COALESCE((SELECT SUM(quantity) FROM invoice_items WHERE tenant_id = $tenantId), 0) as total_items_sold,
+        COALESCE(SUM(CASE WHEN payment_mode = 'CASH' THEN grand_total ELSE 0 END), 0) as cash_sales,
+        COALESCE(SUM(CASE WHEN payment_mode = 'UPI' THEN grand_total ELSE 0 END), 0) as upi_sales,
+        COALESCE(SUM(CASE WHEN payment_mode = 'CREDIT_KHATA' THEN grand_total ELSE 0 END), 0) as khata_sales,
+        COALESCE(SUM(CASE WHEN payment_mode = 'CARD' THEN grand_total ELSE 0 END), 0) as card_sales,
+        COALESCE(SUM(CASE WHEN payment_mode = 'SPLIT' THEN grand_total ELSE 0 END), 0) as split_sales
       FROM invoices
       WHERE tenant_id = $tenantId
-      ORDER BY created_at DESC
-      LIMIT $limit
-    """.query[InvoiceRow].to[List].transact(xa).map(_.map(_.toInvoice()))
+    """.query[SalesOverview].unique.transact(xa)
+
+  def getSoldItems(tenantId: UUID): IO[List[SoldItemStats]] =
+    sql"""
+      SELECT 
+        product_name,
+        COALESCE(SUM(quantity), 0) as total_quantity,
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COALESCE(AVG(unit_price), 0) as avg_price,
+        COUNT(DISTINCT invoice_id) as orders_count
+      FROM invoice_items
+      WHERE tenant_id = $tenantId
+      GROUP BY product_name
+      ORDER BY total_revenue DESC
+    """.query[SoldItemStats].to[List].transact(xa)
+
+  def sendInvoiceWhatsapp(
+      tenantId: UUID,
+      invoiceId: UUID,
+      phone: String,
+      customMsg: Option[String]
+  ): IO[SendWhatsappBillResponse] =
+    for
+      tenantOpt <- tenantService.getTenantById(tenantId)
+      tenant = tenantOpt.getOrElse(throw new RuntimeException("Tenant not found"))
+
+      invOpt <- sql"""
+        SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
+               customer_phone, subtotal, item_discount_total, bill_discount_percent,
+               bill_discount_amount, coupon_code, coupon_discount_amount,
+               loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
+               cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
+               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               notes, created_at
+        FROM invoices
+        WHERE tenant_id = $tenantId AND id = $invoiceId
+      """.query[InvoiceRow].option.transact(xa)
+      invRow = invOpt.getOrElse(throw new RuntimeException("Invoice not found"))
+
+      items <- sql"""
+        SELECT id, invoice_id, tenant_id, product_id, batch_id, product_name,
+               quantity, unit, unit_price, mrp, discount_percent, discount_amount,
+               gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount
+        FROM invoice_items
+        WHERE tenant_id = $tenantId AND invoice_id = $invoiceId
+      """.query[InvoiceItem].to[List].transact(xa)
+
+      itemsText = items.map(it => s"• ${it.quantity}x ${it.productName} - ₹${it.totalAmount}").mkString("\n")
+
+      billText = customMsg.getOrElse(
+        s"""🧾 *${tenant.name}*
+Bill No: ${invRow.invoiceNumber}
+Customer: ${invRow.customerName.getOrElse("Customer")}
+--------------------------
+Items:
+$itemsText
+--------------------------
+Grand Total: *₹${invRow.grandTotal}*
+Payment Mode: ${invRow.paymentMode}
+--------------------------
+Thank you for shopping with us! 🙏"""
+      )
+
+      res <- notificationService.sendInvoiceWhatsapp(tenantId, phone, billText)
+    yield res
 

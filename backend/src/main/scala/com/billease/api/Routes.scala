@@ -113,7 +113,39 @@ class Routes(
     requireAuth(token).flatMap {
       case Right(user) =>
         requireTenantAccess(user, tenantId) match
-          case Right(_) => billingService.listRecentInvoices(tenantId, 50).map(Right(_))
+          case Right(_) => billingService.listRecentInvoices(tenantId, 100).map(Right(_))
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
+  val getSalesOverviewRoute = Endpoints.getSalesOverviewEndpoint.serverLogic { (tenantId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) => billingService.getSalesOverview(tenantId).map(Right(_))
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
+  val getSoldItemsRoute = Endpoints.getSoldItemsEndpoint.serverLogic { (tenantId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) => billingService.getSoldItems(tenantId).map(Right(_))
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
+  val sendInvoiceWhatsappRoute = Endpoints.sendInvoiceWhatsappEndpoint.serverLogic { (tenantId, invoiceId, token, req) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) =>
+            billingService.sendInvoiceWhatsapp(tenantId, invoiceId, req.phone, req.customMessage).map(Right(_))
+              .handleError(e => Left(s"Failed to process WhatsApp request: ${e.getMessage}"))
           case Left(err) => IO.pure(Left(err))
       case Left(err) => IO.pure(Left(err))
     }
@@ -207,6 +239,9 @@ class Routes(
     Endpoints.lowStockEndpoint,
     Endpoints.createInvoiceEndpoint,
     Endpoints.listInvoicesEndpoint,
+    Endpoints.getSalesOverviewEndpoint,
+    Endpoints.getSoldItemsEndpoint,
+    Endpoints.sendInvoiceWhatsappEndpoint,
     Endpoints.listCustomersEndpoint,
     Endpoints.createCustomerEndpoint,
     Endpoints.recordKhataPaymentEndpoint,
@@ -229,6 +264,9 @@ class Routes(
     lowStockRoute,
     createInvoiceRoute,
     listInvoicesRoute,
+    getSalesOverviewRoute,
+    getSoldItemsRoute,
+    sendInvoiceWhatsappRoute,
     listCustomersRoute,
     createCustomerRoute,
     recordKhataPaymentRoute,

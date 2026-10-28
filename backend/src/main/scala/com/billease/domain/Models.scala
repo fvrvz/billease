@@ -445,3 +445,34 @@ case class StockAlert(
     createdAt: Instant
 ) derives Codec.AsObject
 
+// Sales & Analytics
+case class SalesOverview(
+    totalSales: BigDecimal,
+    totalInvoices: Long,
+    totalItemsSold: BigDecimal,
+    cashSales: BigDecimal,
+    upiSales: BigDecimal,
+    khataSales: BigDecimal,
+    cardSales: BigDecimal,
+    splitSales: BigDecimal
+) derives Codec.AsObject
+
+case class SoldItemStats(
+    productName: String,
+    totalQuantity: BigDecimal,
+    totalRevenue: BigDecimal,
+    avgPrice: BigDecimal,
+    ordersCount: Long
+) derives Codec.AsObject
+
+case class SendWhatsappBillRequest(
+    phone: String,
+    customMessage: Option[String] = None
+) derives Codec.AsObject
+
+case class SendWhatsappBillResponse(
+    sent: Boolean,
+    whatsappUrl: String,
+    message: String
+) derives Codec.AsObject
+
