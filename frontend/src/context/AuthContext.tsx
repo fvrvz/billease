@@ -1,6 +1,20 @@
 import { createContext, useContext, createSignal, JSX, onMount } from 'solid-js';
-import { User, Tenant, Role, DecodedOidcClaims, AuthForestTokenResponse } from '../types';
+import { UserManager, WebStorageStateStore, User as OidcUser } from 'oidc-client-ts';
+import { User, Tenant, Role } from '../types';
 import { apiClient } from '../api/client';
+
+export function getOidcUserManager(issuer: string, clientId: string): UserManager {
+  const authority = issuer.replace(/\/$/, '');
+  return new UserManager({
+    authority,
+    client_id: clientId,
+    redirect_uri: window.location.origin,
+    response_type: 'code',
+    scope: 'openid profile email',
+    userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+    loadUserInfo: true
+  });
+}
 
 interface AuthContextType {
   user: () => User | null;
@@ -52,109 +66,64 @@ export function AuthProvider(props: { children: JSX.Element }) {
     sessionStorage.getItem('authforest_client_id') || 'billease-web'
   );
 
+  const applyOidcUser = (oidcUser: OidcUser) => {
+    const profile = oidcUser.profile;
+    const roleClaim = (profile['role'] as string | undefined) || 
+      ((profile['roles'] as string[] | undefined)?.[0]) || 
+      'STORE_ADMIN';
+
+    const cleanRole: Role = roleClaim.toUpperCase().includes('SUPER')
+      ? 'SUPER_ADMIN'
+      : (roleClaim.toUpperCase().includes('ADMIN') || roleClaim.toUpperCase().includes('OWNER') ? 'STORE_ADMIN' : 'CASHIER');
+
+    const appUser: User = {
+      id: oidcUser.profile.sub,
+      tenantId: (profile['tenant_id'] as string | undefined) || 'a0000000-0000-0000-0000-000000000001',
+      username: (profile['preferred_username'] as string | undefined) || profile.email || oidcUser.profile.sub,
+      fullName: profile.name || (profile['preferred_username'] as string | undefined) || 'AuthForest User',
+      email: profile.email,
+      role: cleanRole,
+      isActive: true
+    };
+
+    loginWithToken(oidcUser.access_token, appUser);
+  };
+
   onMount(async () => {
     // 1. Fetch default tenant data
     const t = await apiClient.getTenant('a0000000-0000-0000-0000-000000000001');
     setTenant(t);
 
-    // 2. Check for incoming AuthForest / OIDC Authorization Code in URL
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-
-    if (code) {
-      const storedVerifier = sessionStorage.getItem('authforest_pkce_verifier');
-      if (storedVerifier) {
-        try {
-          await exchangeAuthforestCode(code, storedVerifier);
-        } catch (err) {
-          console.error('Failed to exchange AuthForest authorization code:', err);
-        } finally {
-          sessionStorage.removeItem('authforest_pkce_verifier');
-          // Clean code query parameter from browser bar
-          window.history.replaceState({}, document.title, window.location.pathname);
+    if (urlParams.has('code')) {
+      // 2. Standard OIDC signinCallback using oidc-client-ts UserManager
+      try {
+        const mgr = getOidcUserManager(oidcIssuer(), oidcClientId());
+        const oidcUser = await mgr.signinCallback();
+        if (oidcUser) {
+          applyOidcUser(oidcUser);
         }
+      } catch (err) {
+        console.error('OIDC signinCallback failed:', err);
+      } finally {
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
+    } else {
+      // 3. Check for existing active OIDC session in sessionStorage
+      try {
+        const mgr = getOidcUserManager(oidcIssuer(), oidcClientId());
+        const existingOidcUser = await mgr.getUser();
+        if (existingOidcUser && !existingOidcUser.expired) {
+          applyOidcUser(existingOidcUser);
+        }
+      } catch (_) {}
     }
   });
 
-  const exchangeAuthforestCode = async (code: string, verifier: string) => {
-    const issuer = oidcIssuer().replace(/\/$/, '');
-    const redirectUri = window.location.origin;
-
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: code,
-      redirect_uri: redirectUri,
-      client_id: oidcClientId(),
-      code_verifier: verifier
-    });
-
-    const res = await fetch(`${issuer}/oauth2/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    });
-
-    if (!res.ok) {
-      throw new Error(`AuthForest token exchange returned ${res.status}`);
-    }
-
-    const data: AuthForestTokenResponse = (await res.json()) as AuthForestTokenResponse;
-    const accessToken: string = data.access_token;
-    const idToken: string = data.id_token || data.access_token;
-
-    // Decode ID Token payload
-    const parts: string[] = idToken.split('.');
-    if (parts.length >= 2) {
-      const claims: DecodedOidcClaims = JSON.parse(
-        atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
-      ) as DecodedOidcClaims;
-      const sub: string = claims.sub || 'authforest-user';
-      const roleStr: string = claims.role || (claims.roles && claims.roles[0]) || 'STORE_ADMIN';
-      const cleanRole: Role = roleStr.toUpperCase().includes('SUPER')
-        ? 'SUPER_ADMIN'
-        : (roleStr.toUpperCase().includes('ADMIN') || roleStr.toUpperCase().includes('OWNER') ? 'STORE_ADMIN' : 'CASHIER');
-
-      loginWithToken(accessToken, {
-        id: sub,
-        tenantId: claims.tenant_id || 'a0000000-0000-0000-0000-000000000001',
-        username: claims.preferred_username || claims.email || sub,
-        fullName: claims.name || claims.preferred_username || 'AuthForest User',
-        email: claims.email,
-        role: cleanRole,
-        isActive: true
-      });
-    }
-  };
-
+  // Standard OIDC signinRedirect using oidc-client-ts UserManager
   const initiateAuthforestLogin = async () => {
-    const issuer = oidcIssuer().replace(/\/$/, '');
-    const clientId = oidcClientId();
-    const redirectUri = window.location.origin;
-
-    // Generate random PKCE verifier (32 bytes base64url)
-    const array = new Uint8Array(32);
-    crypto.getRandomValues(array);
-    const verifier = btoa(String.fromCharCode(...array))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-
-    sessionStorage.setItem('authforest_pkce_verifier', verifier);
-
-    // Compute code challenge (SHA-256)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-    const challenge = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-
-    const state = Math.random().toString(36).substring(2);
-    const authUrl = `${issuer}/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=openid%20profile%20email&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
-
-    window.location.href = authUrl;
+    const mgr = getOidcUserManager(oidcIssuer(), oidcClientId());
+    await mgr.signinRedirect();
   };
 
   const setOidcConfig = (issuer: string, clientId: string) => {
@@ -175,10 +144,13 @@ export function AuthProvider(props: { children: JSX.Element }) {
     sessionStorage.setItem('billease_user', JSON.stringify(u));
   };
 
-  const logout = () => {
+  const logout = async () => {
     sessionStorage.removeItem('billease_token');
     sessionStorage.removeItem('billease_user');
-    sessionStorage.removeItem('authforest_pkce_verifier');
+    try {
+      const mgr = getOidcUserManager(oidcIssuer(), oidcClientId());
+      await mgr.removeUser();
+    } catch (_) {}
     switchRole('CASHIER');
   };
 
