@@ -1,6 +1,6 @@
 import { Component, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { ShoppingCart, Package, BookOpen, Tag, Settings, ShieldCheck, Shield } from 'lucide-solid';
+import { ShoppingCart, Package, BookOpen, Tag, Settings, ShieldCheck, Shield, ExternalLink } from 'lucide-solid';
 
 interface NavbarProps {
   activeTab: string;
@@ -127,6 +127,18 @@ export const Navbar: Component<NavbarProps> = (props) => {
 
           {/* Right Header: AuthForest OIDC Button & Role Switcher */}
           <div class="flex items-center gap-2">
+
+            {/* Swagger API Docs Link */}
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open Tapir Swagger OpenAPI Documentation"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors border border-indigo-200 shadow-2xs"
+            >
+              <span>Swagger</span>
+              <ExternalLink class="w-3.5 h-3.5 text-indigo-600" />
+            </a>
             
             {/* AuthForest OIDC Integration Button */}
             <button
