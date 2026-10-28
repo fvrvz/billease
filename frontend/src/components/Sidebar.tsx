@@ -1,7 +1,7 @@
 import { Component, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import {
-  ShoppingCart, Package, BookOpen, Tag, Settings,
+  ShoppingCart, Receipt, Package, BookOpen, Tag, Settings,
   ShieldCheck, LogOut, ExternalLink, ChevronRight, Store
 } from 'lucide-solid';
 
@@ -21,6 +21,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'pos', label: 'POS Billing', shortcut: 'F2', icon: ShoppingCart },
+  { id: 'sales', label: 'Sales & Bills', icon: Receipt },
   { id: 'products', label: 'Inventory', icon: Package },
   { id: 'khata', label: 'Khata / Udhaar', icon: BookOpen },
   { id: 'coupons', label: 'Coupons & Loyalty', icon: Tag },

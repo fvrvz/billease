@@ -240,3 +240,28 @@ export interface LoginResponse {
     [key: string]: unknown;
   };
 }
+
+export interface SalesOverview {
+  totalSales: number;
+  totalInvoices: number;
+  totalItemsSold: number;
+  cashSales: number;
+  upiSales: number;
+  khataSales: number;
+  cardSales: number;
+  splitSales: number;
+}
+
+export interface SoldItemStats {
+  productName: string;
+  totalQuantity: number;
+  totalRevenue: number;
+  avgPrice: number;
+  ordersCount: number;
+}
+
+export interface SendWhatsappBillResponse {
+  sent: boolean;
+  whatsappUrl: string;
+  message: string;
+}

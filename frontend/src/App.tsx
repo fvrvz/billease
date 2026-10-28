@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { Sidebar } from './components/Sidebar';
 import { POSRegister } from './components/POSRegister';
+import { SalesLedger } from './components/SalesLedger';
 import { ProductCatalog } from './components/ProductCatalog';
 import { CustomerKhata } from './components/CustomerKhata';
 import { CouponLoyalty } from './components/CouponLoyalty';
@@ -45,6 +46,12 @@ const AuthenticatedApp: Component = () => {
             <POSRegister
               onBillGenerated={(inv) => setActiveInvoice(inv)}
               openUpiModal={openUpiModal}
+            />
+          </Show>
+
+          <Show when={activeTab() === 'sales'}>
+            <SalesLedger
+              onSelectInvoice={(inv) => setActiveInvoice(inv)}
             />
           </Show>
 
