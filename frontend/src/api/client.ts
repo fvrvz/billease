@@ -15,6 +15,7 @@ import {
   SoldItemStats,
   SendWhatsappBillResponse
 } from '../types';
+import { downloadInvoicePdfLocally } from '../utils/pdfGenerator';
 
 const API_BASE = '/api';
 
@@ -453,12 +454,53 @@ export const apiClient = {
     } catch (_) {}
     const clean = phone.replace(/[^0-9]/g, '');
     const target = clean.length === 10 ? `91${clean}` : clean;
-    const msg = customMessage || `🧾 Bill copy from Billease for invoice #${invoiceId}`;
+    const pdfUrl = `${window.location.protocol}//${window.location.hostname}:8081/api/public/invoices/${invoiceId}/pdf`;
+    const msg = customMessage || `🧾 *Bill copy from Billease* for invoice #${invoiceId}\n\n📄 *Download PDF Bill:* ${pdfUrl}`;
     return {
       sent: true,
       whatsappUrl: `https://wa.me/${target}?text=${encodeURIComponent(msg)}`,
       message: `WhatsApp link ready for +${target}`
     };
+  },
+
+  getInvoicePdfUrl(tenantId: string, invoiceId: string): string {
+    return `${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/pdf`;
+  },
+
+  getPublicInvoicePdfUrl(invoiceId: string): string {
+    return `${API_BASE}/public/invoices/${invoiceId}/pdf`;
+  },
+
+  async downloadInvoicePdf(tenantId: string, invoiceId: string, token: string, invoiceNumber: string): Promise<void> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/pdf`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Bill_${invoiceNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+    } catch (_) {}
+    const inv = getFallbackInvoices().find(i => i.id === invoiceId);
+    if (inv) {
+      const tenant = getFallbackTenant();
+      downloadInvoicePdfLocally(inv, {
+        name: tenant.name,
+        address: tenant.address,
+        city: tenant.city,
+        phone: tenant.phone,
+        gstin: tenant.gstin,
+        hasGst: tenant.hasGst,
+      });
+    }
   }
 };
 

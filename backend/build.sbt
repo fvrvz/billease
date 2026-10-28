@@ -55,6 +55,9 @@ lazy val root = (project in file("."))
       // OIDC JWT validation
       "com.nimbusds" % "nimbus-jose-jwt" % "9.47",
 
+      // PDF Generation
+      "com.github.librepdf" % "openpdf" % "2.0.3",
+
       // Logging
       "ch.qos.logback" % "logback-classic" % "1.5.16"
     )
