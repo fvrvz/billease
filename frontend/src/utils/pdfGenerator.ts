@@ -87,9 +87,16 @@ export function generateInvoicePdfDoc(
   doc.text(`Date: ${invoiceDate}`, pageWidth - startX, metaY, { align: 'right' });
 
   metaY += 4.5;
-  doc.setTextColor(22, 101, 52); // Emerald Green
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Payment: ${invoice.paymentMode}  |  Status: PAID`, pageWidth - startX, metaY, { align: 'right' });
+  const isCompleted = (invoice.paymentStatus || 'COMPLETED') === 'COMPLETED';
+  if (isCompleted) {
+    doc.setTextColor(22, 101, 52); // Emerald Green
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Payment: ${invoice.paymentMode}  |  Status: PAID (DONE)`, pageWidth - startX, metaY, { align: 'right' });
+  } else {
+    doc.setTextColor(217, 119, 6); // Amber
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Payment: ${invoice.paymentMode}  |  Status: PAYMENT PENDING`, pageWidth - startX, metaY, { align: 'right' });
+  }
 
   if (invoice.cashierName) {
     metaY += 4.5;
