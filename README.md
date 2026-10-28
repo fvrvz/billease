@@ -96,3 +96,4 @@ docker compose up -d
 1. **Store Owner**: `ganesh_owner` / `store123` (Full store branding, products, coupons, and reports)
 2. **Cashier**: `cashier1` / `cashier123` (Fast POS billing and receipt printing)
 3. **Super Admin**: `superadmin` / `admin123` (Platform-wide tenant onboarding and feature configuration)
+

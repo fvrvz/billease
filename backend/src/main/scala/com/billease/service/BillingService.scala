@@ -267,3 +267,4 @@ class BillingService(
       ORDER BY created_at DESC
       LIMIT $limit
     """.query[Invoice].to[List].transact(xa)
+

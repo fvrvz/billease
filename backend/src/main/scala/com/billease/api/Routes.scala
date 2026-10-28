@@ -226,3 +226,4 @@ class Routes(
   ) ++ swaggerEndpoints
 
   val httpRoutes: HttpRoutes[IO] = Http4sServerInterpreter[IO]().toRoutes(allServerEndpoints)
+

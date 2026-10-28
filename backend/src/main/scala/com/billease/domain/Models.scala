@@ -337,3 +337,4 @@ case class StockAlert(
     status: String,
     createdAt: Instant
 ) derives Codec.AsObject
+

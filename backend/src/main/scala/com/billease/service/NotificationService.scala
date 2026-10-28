@@ -103,3 +103,4 @@ class NotificationService(
         $id, $tenantId, $productId, $alertTypeStr, $message, $channelStr, $recipient, $status, $errorMessage
       )
     """.update.run.transact(xa).void
+

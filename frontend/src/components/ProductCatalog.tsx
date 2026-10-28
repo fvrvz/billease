@@ -368,3 +368,4 @@ export const ProductCatalog: Component = () => {
     </div>
   );
 };
+

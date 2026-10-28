@@ -71,3 +71,4 @@ export const UpiQrModal: Component<UpiQrModalProps> = (props) => {
     </div>
   );
 };
+

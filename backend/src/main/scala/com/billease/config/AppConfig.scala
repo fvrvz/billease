@@ -20,3 +20,4 @@ case class AppConfig(
 object AppConfig:
   def load(): AppConfig =
     ConfigSource.default.loadOrThrow[AppConfig]
+

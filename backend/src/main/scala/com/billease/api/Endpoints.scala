@@ -116,3 +116,4 @@ object Endpoints:
     .in(jsonBody[CouponValidateRequest])
     .out(jsonBody[CouponValidationResult])
     .errorOut(stringBody)
+

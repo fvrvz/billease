@@ -594,3 +594,4 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
     </div>
   );
 };
+

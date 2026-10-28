@@ -78,3 +78,4 @@ object Main extends IOApp:
           .as(ExitCode.Success)
       }
     yield exitCode
+

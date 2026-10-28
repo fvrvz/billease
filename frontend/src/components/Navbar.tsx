@@ -1,10 +1,11 @@
 import { Component, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { ShoppingCart, Package, BookOpen, Tag, Settings, ShieldCheck, UserCheck } from 'lucide-solid';
+import { ShoppingCart, Package, BookOpen, Tag, Settings, ShieldCheck, Shield } from 'lucide-solid';
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  openOidcModal: () => void;
 }
 
 export const Navbar: Component<NavbarProps> = (props) => {
@@ -124,15 +125,27 @@ export const Navbar: Component<NavbarProps> = (props) => {
             </Show>
           </nav>
 
-          {/* Role Switcher Pill (Quick demo/live switcher) */}
+          {/* Right Header: AuthForest OIDC Button & Role Switcher */}
           <div class="flex items-center gap-2">
-            <div class="hidden sm:flex flex-col text-right">
+            
+            {/* AuthForest OIDC Integration Button */}
+            <button
+              onClick={props.openOidcModal}
+              title="Configure AuthForest OIDC Connection"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-colors border border-emerald-200 shadow-2xs"
+            >
+              <Shield class="w-3.5 h-3.5 text-emerald-600" />
+              <span class="hidden sm:inline">AuthForest</span> OIDC
+            </button>
+
+            <div class="hidden lg:flex flex-col text-right">
               <span class="text-xs font-semibold text-slate-800">{user()?.fullName}</span>
               <span class="text-[10px] uppercase tracking-wider text-slate-500 font-mono">
                 {user()?.role?.replace('_', ' ')}
               </span>
             </div>
 
+            {/* Quick Demo Switcher */}
             <div class="bg-slate-100 p-1 rounded-lg flex items-center gap-1 border border-slate-200">
               <button
                 onClick={() => switchRole('CASHIER')}
@@ -162,6 +175,7 @@ export const Navbar: Component<NavbarProps> = (props) => {
                 SuperAdmin
               </button>
             </div>
+
           </div>
 
         </div>

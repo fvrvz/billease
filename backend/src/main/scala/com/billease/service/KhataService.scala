@@ -66,3 +66,4 @@ class KhataService(xa: Transactor[IO]):
       WHERE tenant_id = $tenantId AND customer_id = $customerId
       ORDER BY created_at DESC
     """.query[KhataEntry].to[List].transact(xa)
+

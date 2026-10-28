@@ -291,3 +291,4 @@ INSERT INTO customers (id, tenant_id, name, phone, address, credit_limit, curren
 INSERT INTO coupons (id, tenant_id, code, discount_type, discount_value, min_order_amount, max_discount_cap, valid_until) VALUES
 ('10000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'DIWALI50', 'FLAT', 50.00, 500.00, 50.00, '2027-12-31 23:59:59'),
 ('10000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'SAVE10', 'PERCENTAGE', 10.00, 300.00, 100.00, '2027-12-31 23:59:59');
+

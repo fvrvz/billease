@@ -91,3 +91,4 @@ object GstCalculator:
           igstAmount = BigDecimal(0),
           totalAmount = round2(taxable + totalTax)
         )
+

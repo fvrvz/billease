@@ -112,3 +112,4 @@ class ProductService(xa: Transactor[IO]):
       HAVING COALESCE(SUM(b.quantity), 0) <= p.min_stock_alert
       ORDER BY current_stock ASC
     """.query[Product].to[List].transact(xa)
+

@@ -9,6 +9,7 @@ import { StoreSettings } from './components/StoreSettings';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { ThermalReceiptModal } from './components/ThermalReceiptModal';
 import { UpiQrModal } from './components/UpiQrModal';
+import { OidcAuthModal } from './components/OidcAuthModal';
 import { Invoice } from './types';
 
 const MainLayout: Component = () => {
@@ -18,6 +19,7 @@ const MainLayout: Component = () => {
   // Modals state
   const [activeInvoice, setActiveInvoice] = createSignal<Invoice | null>(null);
   const [upiData, setUpiData] = createSignal<{ amount: number; upiUri: string } | null>(null);
+  const [showOidcModal, setShowOidcModal] = createSignal(false);
 
   const openUpiModal = (amount: number, upiUri: string) => {
     setUpiData({ amount, upiUri });
@@ -43,7 +45,11 @@ const MainLayout: Component = () => {
       </Show>
 
       {/* Main Top Navbar */}
-      <Navbar activeTab={activeTab()} setActiveTab={setActiveTab} />
+      <Navbar
+        activeTab={activeTab()}
+        setActiveTab={setActiveTab}
+        openOidcModal={() => setShowOidcModal(true)}
+      />
 
       {/* Workspace Body */}
       <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
@@ -92,9 +98,16 @@ const MainLayout: Component = () => {
         />
       </Show>
 
+      {/* AuthForest OIDC Modal */}
+      <Show when={showOidcModal()}>
+        <OidcAuthModal
+          onClose={() => setShowOidcModal(false)}
+        />
+      </Show>
+
       {/* Compact Footer */}
       <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400">
-        <span>Billease • Indian Retail & POS Engine • Built with Scala 3 & SolidJS</span>
+        <span>Billease • Indian Retail & POS Engine • Secured by AuthForest OIDC & Scala 3</span>
       </footer>
 
     </div>

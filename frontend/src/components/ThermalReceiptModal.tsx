@@ -216,3 +216,4 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
     </div>
   );
 };
+

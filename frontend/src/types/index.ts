@@ -139,3 +139,4 @@ export interface Invoice {
   createdAt: string;
   items?: InvoiceItem[];
 }
+

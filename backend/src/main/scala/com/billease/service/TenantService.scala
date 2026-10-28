@@ -114,3 +114,4 @@ class TenantService(xa: Transactor[IO]):
             case None => IO.pure(None)
         case None => IO.pure(None)
     yield userOpt.map(u => (u, tenantOpt))
+

@@ -80,3 +80,4 @@ class LoyaltyCouponService(xa: Transactor[IO]):
       UPDATE coupons SET usage_count = usage_count + 1
       WHERE tenant_id = $tenantId AND code = ${code.toUpperCase}
     """.update.run.transact(xa).void
+
