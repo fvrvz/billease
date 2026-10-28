@@ -1,26 +1,47 @@
 import { Component, For, Show, createSignal } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Invoice } from '../types';
-import { Printer, CheckCircle, MessageCircle, FileDown } from 'lucide-solid';
+import { apiClient } from '../api/client';
+import { Printer, CheckCircle, MessageCircle, FileDown, Clock } from 'lucide-solid';
 import { downloadInvoicePdfLocally, shareInvoicePdf } from '../utils/pdfGenerator';
 
 interface ThermalReceiptModalProps {
   invoice: Invoice;
   onClose: () => void;
+  onInvoiceUpdated?: (invoice: Invoice) => void;
 }
 
 export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) => {
-  const { tenant } = useAuth();
+  const { tenant, token } = useAuth();
+  const [currentInvoice, setCurrentInvoice] = createSignal<Invoice>(props.invoice);
   const [customPhone, setCustomPhone] = createSignal('');
   const [isSharing, setIsSharing] = createSignal(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = createSignal(false);
 
   const handlePrint = () => {
     window.print();
   };
 
+  const handleMarkPaymentDone = async () => {
+    const t = tenant();
+    if (!t) return;
+    setIsUpdatingStatus(true);
+    try {
+      const updated = await apiClient.updateInvoicePaymentStatus(t.id, currentInvoice().id, token(), {
+        paymentStatus: 'COMPLETED'
+      });
+      if (updated) {
+        setCurrentInvoice(updated);
+        props.onInvoiceUpdated?.(updated);
+      }
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
   const handleDownloadPdf = () => {
     const t = tenant();
-    downloadInvoicePdfLocally(props.invoice, {
+    downloadInvoicePdfLocally(currentInvoice(), {
       name: t?.name,
       legalName: t?.legalName,
       address: t?.address,
@@ -36,7 +57,7 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
     try {
       const t = tenant();
       await shareInvoicePdf(
-        props.invoice,
+        currentInvoice(),
         {
           name: t?.name,
           legalName: t?.legalName,
@@ -46,7 +67,7 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
           gstin: t?.gstin,
           hasGst: t?.hasGst,
         },
-        props.invoice.customerPhone || customPhone()
+        currentInvoice().customerPhone || customPhone()
       );
     } finally {
       setIsSharing(false);
@@ -54,16 +75,16 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
   };
 
   const formattedDate = () => {
-    const d = new Date(props.invoice.createdAt);
+    const d = new Date(currentInvoice().createdAt);
     return `${d.toLocaleDateString('en-IN')} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   const receiptUpiUrl = () => {
     const t = tenant();
     if (!t?.upiVpa) return '';
-    const total = props.invoice.grandTotal;
+    const total = currentInvoice().grandTotal;
     const payee = encodeURIComponent(t.upiPayeeName || t.name);
-    const uri = `upi://pay?pa=${t.upiVpa}&pn=${payee}&am=${total}&cu=INR&tn=${props.invoice.invoiceNumber}`;
+    const uri = `upi://pay?pa=${t.upiVpa}&pn=${payee}&am=${total}&cu=INR&tn=${currentInvoice().invoiceNumber}`;
     return `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(uri)}`;
   };
 
@@ -73,14 +94,47 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
         
         {/* Modal Controls (Not printed) */}
         <div class="flex items-center justify-between pb-2 border-b border-slate-100 print:hidden">
-          <div class="flex items-center gap-2 text-emerald-700 font-bold text-sm">
-            <CheckCircle class="w-5 h-5" />
-            <span>Bill Generated Successfully!</span>
+          <div class="flex items-center gap-2 font-bold text-sm">
+            <Show
+              when={currentInvoice().paymentStatus === 'COMPLETED'}
+              fallback={
+                <div class="flex items-center gap-2 text-amber-700">
+                  <Clock class="w-5 h-5 text-amber-600" />
+                  <span>Bill Created (Payment Pending)</span>
+                </div>
+              }
+            >
+              <div class="flex items-center gap-2 text-emerald-700">
+                <CheckCircle class="w-5 h-5" />
+                <span>Payment Done • Bill Completed</span>
+              </div>
+            </Show>
           </div>
           <button onClick={props.onClose} class="text-slate-400 hover:text-slate-600 font-bold text-sm">
             ✕
           </button>
         </div>
+
+        {/* Pending Payment Warning & 1-Click Mark Done Banner */}
+        <Show when={currentInvoice().paymentStatus === 'PENDING'}>
+          <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 print:hidden">
+            <div class="flex items-center gap-2">
+              <Clock class="w-4 h-4 text-amber-600 shrink-0" />
+              <div>
+                <p class="font-bold">Payment Not Received Yet</p>
+                <p class="text-[10px] text-amber-700">This bill is excluded from total sales until marked done.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleMarkPaymentDone}
+              disabled={isUpdatingStatus()}
+              class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+            >
+              <CheckCircle class="w-3.5 h-3.5" />
+              {isUpdatingStatus() ? 'Updating...' : 'Mark Done'}
+            </button>
+          </div>
+        </Show>
 
         {/* Action Buttons (Not printed) */}
         <div class="space-y-2 print:hidden">
@@ -122,7 +176,7 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
           </div>
 
           {/* Quick WhatsApp input if buyer phone wasn't set earlier */}
-          <Show when={!props.invoice.customerPhone}>
+          <Show when={!currentInvoice().customerPhone}>
             <div class="p-2 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs">
               <MessageCircle class="w-4 h-4 text-emerald-600 shrink-0" />
               <input
@@ -181,18 +235,20 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
           {/* Invoice Meta */}
           <div class="border-b border-dashed border-slate-300 pb-2 text-[10px] space-y-0.5">
             <div class="flex justify-between">
-              <span>Bill No: <b>{props.invoice.invoiceNumber}</b></span>
+              <span>Bill No: <b>{currentInvoice().invoiceNumber}</b></span>
               <span>{formattedDate()}</span>
             </div>
-            <Show when={props.invoice.customerName || props.invoice.customerPhone}>
+            <Show when={currentInvoice().customerName || currentInvoice().customerPhone}>
               <div class="flex justify-between">
-                <span>Buyer: <b>{props.invoice.customerName || 'Customer'}</b></span>
-                <span class="font-bold">{props.invoice.customerPhone || ''}</span>
+                <span>Buyer: <b>{currentInvoice().customerName || 'Customer'}</b></span>
+                <span class="font-bold">{currentInvoice().customerPhone || ''}</span>
               </div>
             </Show>
             <div class="flex justify-between text-slate-500">
-              <span>Payment: <b>{props.invoice.paymentMode}</b></span>
-              <span>Cashier: {props.invoice.cashierName || 'Counter'}</span>
+              <span>Payment: <b>{currentInvoice().paymentMode}</b></span>
+              <span class={currentInvoice().paymentStatus === 'COMPLETED' ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+                {currentInvoice().paymentStatus === 'COMPLETED' ? 'STATUS: PAID (DONE)' : 'STATUS: PAYMENT PENDING'}
+              </span>
             </div>
           </div>
 
@@ -205,7 +261,7 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
               <span class="w-14 text-right shrink-0">Total</span>
             </div>
 
-            <For each={props.invoice.items}>
+            <For each={currentInvoice().items}>
               {(item) => (
                 <div class="flex justify-between items-start text-[10px] py-1 border-b border-dotted border-slate-200/70">
                   <div class="flex-1 pr-2 min-w-0 break-words whitespace-normal leading-snug">
@@ -226,47 +282,47 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
           <div class="border-t border-dashed border-slate-300 pt-2 space-y-1 text-[10px]">
             <div class="flex justify-between">
               <span>Gross Subtotal:</span>
-              <span>₹{props.invoice.subtotal.toFixed(2)}</span>
+              <span>₹{currentInvoice().subtotal.toFixed(2)}</span>
             </div>
 
-            <Show when={props.invoice.itemDiscountTotal > 0}>
+            <Show when={currentInvoice().itemDiscountTotal > 0}>
               <div class="flex justify-between">
                 <span>Item Discount:</span>
-                <span>-₹{props.invoice.itemDiscountTotal.toFixed(2)}</span>
+                <span>-₹{currentInvoice().itemDiscountTotal.toFixed(2)}</span>
               </div>
             </Show>
 
-            <Show when={props.invoice.billDiscountAmount > 0}>
+            <Show when={currentInvoice().billDiscountAmount > 0}>
               <div class="flex justify-between">
                 <span>Bill Discount:</span>
-                <span>-₹{props.invoice.billDiscountAmount.toFixed(2)}</span>
+                <span>-₹{currentInvoice().billDiscountAmount.toFixed(2)}</span>
               </div>
             </Show>
 
-            <Show when={props.invoice.couponDiscountAmount > 0}>
+            <Show when={currentInvoice().couponDiscountAmount > 0}>
               <div class="flex justify-between">
-                <span>Coupon ({props.invoice.couponCode}):</span>
-                <span>-₹{props.invoice.couponDiscountAmount.toFixed(2)}</span>
+                <span>Coupon ({currentInvoice().couponCode}):</span>
+                <span>-₹{currentInvoice().couponDiscountAmount.toFixed(2)}</span>
               </div>
             </Show>
 
-            <Show when={props.invoice.loyaltyDiscountAmount > 0}>
+            <Show when={currentInvoice().loyaltyDiscountAmount > 0}>
               <div class="flex justify-between">
                 <span>Loyalty Redeemed:</span>
-                <span>-₹{props.invoice.loyaltyDiscountAmount.toFixed(2)}</span>
+                <span>-₹{currentInvoice().loyaltyDiscountAmount.toFixed(2)}</span>
               </div>
             </Show>
 
             {/* Final Grand Total in Bold */}
             <div class="flex justify-between text-sm font-black border-y border-dashed border-slate-400 py-1 mt-1">
               <span>TOTAL AMOUNT:</span>
-              <span>₹{props.invoice.grandTotal.toFixed(2)}</span>
+              <span>₹{currentInvoice().grandTotal.toFixed(2)}</span>
             </div>
 
-            <Show when={props.invoice.paymentMode === 'CASH' && props.invoice.cashTendered > 0}>
+            <Show when={currentInvoice().paymentMode === 'CASH' && currentInvoice().cashTendered > 0}>
               <div class="flex justify-between text-[10px] text-slate-600">
-                <span>Cash Tendered: ₹{props.invoice.cashTendered.toFixed(2)}</span>
-                <span>Change Returned: ₹{props.invoice.changeReturned.toFixed(2)}</span>
+                <span>Cash Tendered: ₹{currentInvoice().cashTendered.toFixed(2)}</span>
+                <span>Change Returned: ₹{currentInvoice().changeReturned.toFixed(2)}</span>
               </div>
             </Show>
           </div>

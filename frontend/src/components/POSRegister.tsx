@@ -1,8 +1,9 @@
 import { Component, createSignal, onMount, onCleanup, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { Product, Customer, CartItem, PaymentMode, Invoice } from '../types';
+import { Product, Customer, CartItem, PaymentMode, PaymentStatus, Invoice } from '../types';
 import { apiClient } from '../api/client';
-import { Search, Plus, Minus, Trash2, QrCode, Banknote, BookOpen, Award, UserCheck, MessageCircle } from 'lucide-solid';
+import { PaymentProcessModal } from './PaymentProcessModal';
+import { Search, Plus, Minus, Trash2, QrCode, Banknote, CreditCard, BookOpen, Award, UserCheck, MessageCircle } from 'lucide-solid';
 
 interface POSRegisterProps {
   onBillGenerated: (invoice: Invoice) => void;
@@ -36,6 +37,10 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
   // Cash tendered for change
   const [cashTendered, setCashTendered] = createSignal<number>(0);
 
+  // Payment Confirmation Modal State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = createSignal(false);
+  const [selectedPaymentMode, setSelectedPaymentMode] = createSignal<PaymentMode>('CASH');
+
   let searchInputRef: HTMLInputElement | undefined;
 
   // Load products & customers
@@ -50,6 +55,16 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
     setCustomers(cList);
   };
 
+  const openPaymentConfirmation = (mode: PaymentMode) => {
+    if (cart().length === 0) return;
+    if (mode === 'CREDIT_KHATA' && !selectedCustomerId()) {
+      alert('Please select a customer from the Khata dropdown before placing an Udhaar order!');
+      return;
+    }
+    setSelectedPaymentMode(mode);
+    setIsPaymentModalOpen(true);
+  };
+
   onMount(() => {
     loadData();
 
@@ -60,13 +75,13 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
         searchInputRef?.focus();
       } else if (e.key === 'F4') {
         e.preventDefault();
-        handleCheckout('CASH');
+        openPaymentConfirmation('CASH');
       } else if (e.key === 'F5') {
         e.preventDefault();
-        handleCheckout('UPI');
+        openPaymentConfirmation('UPI');
       } else if (e.key === 'F6') {
         e.preventDefault();
-        handleCheckout('CREDIT_KHATA');
+        openPaymentConfirmation('CREDIT_KHATA');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -194,29 +209,16 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
   };
 
   // Handle Checkout / Billing
-  const handleCheckout = async (mode: PaymentMode) => {
+  const handleCheckout = async (mode: PaymentMode, status: PaymentStatus, tendered?: number) => {
     const t = tenant();
     if (!t || cart().length === 0) return;
 
-    if (mode === 'CREDIT_KHATA' && !selectedCustomerId()) {
-      alert('Please select a customer from the Khata dropdown before placing an Udhaar order!');
-      return;
-    }
+    setIsPaymentModalOpen(false);
 
     const total = grandTotal();
-
-    // If UPI, generate dynamic NPCI UPI URI and popup QR
-    const upiVpa = t.upiVpa || 'store@upi';
-    const upiPayee = encodeURIComponent(t.upiPayeeName || t.name);
-    const invoiceNumHint = `${t.invoicePrefix}-${Date.now() % 100000}`;
-    const upiUri = `upi://pay?pa=${upiVpa}&pn=${upiPayee}&am=${total}&cu=INR&tn=Bill-${invoiceNumHint}`;
-
-    if (mode === 'UPI') {
-      props.openUpiModal(total, upiUri);
-    }
-
     const finalCustomerName = buyerName().trim() || selectedCustomer()?.name || undefined;
     const finalCustomerPhone = buyerPhone().trim() || selectedCustomer()?.phone || undefined;
+    const effectiveCashTendered = mode === 'CASH' ? (tendered ?? cashTendered() ?? total) : total;
 
     const payload = {
       customerId: selectedCustomerId() || undefined,
@@ -237,7 +239,8 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
       couponDiscountAmount: couponDiscount(),
       redeemLoyaltyPoints: redeemPoints(),
       paymentMode: mode,
-      cashTendered: mode === 'CASH' ? cashTendered() || total : total,
+      paymentStatus: status,
+      cashTendered: effectiveCashTendered,
       notes: ''
     };
 
@@ -634,10 +637,10 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
             </Show>
           </div>
 
-          {/* Quick Payment Buttons (F4, F5, F6) */}
-          <div class="grid grid-cols-3 gap-2 pt-2">
+          {/* Quick Payment Buttons */}
+          <div class="grid grid-cols-4 gap-2 pt-2">
             <button
-              onClick={() => handleCheckout('CASH')}
+              onClick={() => openPaymentConfirmation('CASH')}
               disabled={cart().length === 0}
               class="p-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors"
             >
@@ -646,16 +649,25 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
             </button>
 
             <button
-              onClick={() => handleCheckout('UPI')}
+              onClick={() => openPaymentConfirmation('UPI')}
               disabled={cart().length === 0}
               class="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors"
             >
               <QrCode class="w-4 h-4" />
-              <span>📱 Scan UPI (F5)</span>
+              <span>📱 UPI (F5)</span>
             </button>
 
             <button
-              onClick={() => handleCheckout('CREDIT_KHATA')}
+              onClick={() => openPaymentConfirmation('CARD')}
+              disabled={cart().length === 0}
+              class="p-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors"
+            >
+              <CreditCard class="w-4 h-4" />
+              <span>💳 Card</span>
+            </button>
+
+            <button
+              onClick={() => openPaymentConfirmation('CREDIT_KHATA')}
               disabled={cart().length === 0}
               class="p-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex flex-col items-center justify-center gap-1 transition-colors"
             >
@@ -667,6 +679,19 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
         </div>
 
       </div>
+
+      {/* Payment Processing & Confirmation Modal */}
+      <Show when={isPaymentModalOpen()}>
+        <PaymentProcessModal
+          amount={grandTotal()}
+          initialMode={selectedPaymentMode()}
+          buyerName={buyerName().trim() || undefined}
+          buyerPhone={buyerPhone().trim() || undefined}
+          selectedCustomerName={selectedCustomer()?.name}
+          onConfirm={(mode, status, tendered) => handleCheckout(mode, status, tendered)}
+          onClose={() => setIsPaymentModalOpen(false)}
+        />
+      </Show>
 
     </div>
   );

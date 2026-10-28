@@ -90,6 +90,7 @@ class BillingService(
       else BigDecimal(0)
 
       now = Instant.now()
+      payStatus = req.paymentStatus.getOrElse(PaymentStatus.COMPLETED)
 
       // 6. Persist Invoice
       _ <- sql"""
@@ -99,7 +100,7 @@ class BillingService(
           bill_discount_amount, coupon_code, coupon_discount_amount,
           loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
           cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-          payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+          payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
           notes, created_at
         ) VALUES (
           $invoiceId, $tenantId, $invoiceNum, ${invType.toString}, ${req.customerId},
@@ -107,7 +108,7 @@ class BillingService(
           $billDiscPct, $billDiscAmount, ${req.couponCode}, $couponDiscAmt,
           $redeemPoints, $loyaltyDiscAmt, $taxableTotal,
           $cgstTotal, $sgstTotal, $igstTotal, $roundOff, $roundedGrandTotal,
-          ${payMode.toString}, $cashTendered, $change, $cashierId,
+          ${payMode.toString}, ${payStatus.toString}, $cashTendered, $change, $cashierId,
           $cashierName, ${req.notes}, $now
         )
       """.update.run.transact(xa)
@@ -170,9 +171,9 @@ class BillingService(
         )
       }
 
-      // 8. Handle Udhaar / Customer Khata Credit
-      _ <- (req.customerId, payMode) match
-        case (Some(custId), PaymentMode.CREDIT_KHATA) =>
+      // 8. Handle Udhaar / Customer Khata Credit (Only if payment is COMPLETED / Confirmed)
+      _ <- (req.customerId, payMode, payStatus) match
+        case (Some(custId), PaymentMode.CREDIT_KHATA, PaymentStatus.COMPLETED) =>
           val ledgerId = UUID.randomUUID()
           sql"""
             UPDATE customers SET current_due = current_due + $roundedGrandTotal
@@ -253,6 +254,7 @@ class BillingService(
       roundOff = roundOff,
       grandTotal = roundedGrandTotal,
       paymentMode = payMode,
+      paymentStatus = payStatus,
       cashTendered = cashTendered,
       changeReturned = change,
       cashierId = Some(cashierId),
@@ -270,7 +272,7 @@ class BillingService(
                bill_discount_amount, coupon_code, coupon_discount_amount,
                loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
                cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
                notes, created_at
         FROM invoices
         WHERE tenant_id = $tenantId
@@ -292,14 +294,21 @@ class BillingService(
   def getSalesOverview(tenantId: UUID): IO[SalesOverview] =
     sql"""
       SELECT 
-        COALESCE(SUM(grand_total), 0) as total_sales,
-        COUNT(id) as total_invoices,
-        COALESCE((SELECT SUM(quantity) FROM invoice_items WHERE tenant_id = $tenantId), 0) as total_items_sold,
-        COALESCE(SUM(CASE WHEN payment_mode = 'CASH' THEN grand_total ELSE 0 END), 0) as cash_sales,
-        COALESCE(SUM(CASE WHEN payment_mode = 'UPI' THEN grand_total ELSE 0 END), 0) as upi_sales,
-        COALESCE(SUM(CASE WHEN payment_mode = 'CREDIT_KHATA' THEN grand_total ELSE 0 END), 0) as khata_sales,
-        COALESCE(SUM(CASE WHEN payment_mode = 'CARD' THEN grand_total ELSE 0 END), 0) as card_sales,
-        COALESCE(SUM(CASE WHEN payment_mode = 'SPLIT' THEN grand_total ELSE 0 END), 0) as split_sales
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' THEN grand_total ELSE 0 END), 0) as total_sales,
+        COUNT(CASE WHEN payment_status = 'COMPLETED' THEN 1 END) as total_invoices,
+        COALESCE((
+          SELECT SUM(ii.quantity) 
+          FROM invoice_items ii 
+          JOIN invoices i ON ii.invoice_id = i.id 
+          WHERE ii.tenant_id = $tenantId AND i.payment_status = 'COMPLETED'
+        ), 0) as total_items_sold,
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' AND payment_mode = 'CASH' THEN grand_total ELSE 0 END), 0) as cash_sales,
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' AND payment_mode = 'UPI' THEN grand_total ELSE 0 END), 0) as upi_sales,
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' AND payment_mode = 'CREDIT_KHATA' THEN grand_total ELSE 0 END), 0) as khata_sales,
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' AND payment_mode = 'CARD' THEN grand_total ELSE 0 END), 0) as card_sales,
+        COALESCE(SUM(CASE WHEN payment_status = 'COMPLETED' AND payment_mode = 'SPLIT' THEN grand_total ELSE 0 END), 0) as split_sales,
+        COALESCE(SUM(CASE WHEN payment_status = 'PENDING' THEN grand_total ELSE 0 END), 0) as pending_sales,
+        COUNT(CASE WHEN payment_status = 'PENDING' THEN 1 END) as pending_invoices
       FROM invoices
       WHERE tenant_id = $tenantId
     """.query[SalesOverview].unique.transact(xa)
@@ -307,14 +316,15 @@ class BillingService(
   def getSoldItems(tenantId: UUID): IO[List[SoldItemStats]] =
     sql"""
       SELECT 
-        product_name,
-        COALESCE(SUM(quantity), 0) as total_quantity,
-        COALESCE(SUM(total_amount), 0) as total_revenue,
-        COALESCE(AVG(unit_price), 0) as avg_price,
-        COUNT(DISTINCT invoice_id) as orders_count
-      FROM invoice_items
-      WHERE tenant_id = $tenantId
-      GROUP BY product_name
+        ii.product_name,
+        COALESCE(SUM(ii.quantity), 0) as total_quantity,
+        COALESCE(SUM(ii.total_amount), 0) as total_revenue,
+        COALESCE(AVG(ii.unit_price), 0) as avg_price,
+        COUNT(DISTINCT ii.invoice_id) as orders_count
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+      WHERE ii.tenant_id = $tenantId AND i.payment_status = 'COMPLETED'
+      GROUP BY ii.product_name
       ORDER BY total_revenue DESC
     """.query[SoldItemStats].to[List].transact(xa)
 
@@ -326,7 +336,7 @@ class BillingService(
                bill_discount_amount, coupon_code, coupon_discount_amount,
                loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
                cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
                notes, created_at
         FROM invoices
         WHERE tenant_id = $tenantId AND id = $invoiceId
@@ -341,6 +351,52 @@ class BillingService(
             FROM invoice_items
             WHERE tenant_id = $tenantId AND invoice_id = $invoiceId
           """.query[InvoiceItem].to[List].transact(xa).map(items => Some(row.toInvoice(items)))
+    yield res
+
+  def updatePaymentStatus(
+      tenantId: UUID,
+      invoiceId: UUID,
+      req: UpdatePaymentStatusRequest
+  ): IO[Option[Invoice]] =
+    for
+      invOpt <- getInvoiceById(tenantId, invoiceId)
+      res <- invOpt match
+        case None => IO.pure(None)
+        case Some(inv) =>
+          val newMode = req.paymentMode.getOrElse(inv.paymentMode)
+          for
+            _ <- sql"""
+              UPDATE invoices
+              SET payment_status = ${req.paymentStatus},
+                  payment_mode = $newMode,
+                  notes = COALESCE(${req.notes}, notes)
+              WHERE tenant_id = $tenantId AND id = $invoiceId
+            """.update.run.transact(xa)
+
+            // If transitioning to COMPLETED on Khata, record ledger entry
+            _ <- if req.paymentStatus == PaymentStatus.COMPLETED && inv.paymentStatus != PaymentStatus.COMPLETED && newMode == PaymentMode.CREDIT_KHATA then
+              inv.customerId match
+                case Some(cid) =>
+                  val ledgerId = UUID.randomUUID()
+                  sql"""
+                    UPDATE customers SET current_due = current_due + ${inv.grandTotal}
+                    WHERE id = $cid AND tenant_id = $tenantId
+                  """.update.run.transact(xa) *>
+                  sql"""
+                    INSERT INTO khata_ledger (
+                      id, tenant_id, customer_id, entry_type, amount, balance_after,
+                      invoice_id, payment_method, notes
+                    ) VALUES (
+                      $ledgerId, $tenantId, $cid, 'BILL_CREDIT', ${inv.grandTotal},
+                      (SELECT current_due FROM customers WHERE id = $cid),
+                      $invoiceId, 'CREDIT_KHATA', ${s"Bill #${inv.invoiceNumber}"}
+                    )
+                  """.update.run.transact(xa).void
+                case None => IO.unit
+            else IO.unit
+
+            updated <- getInvoiceById(tenantId, invoiceId)
+          yield updated
     yield res
 
   def getInvoicePdf(tenantId: UUID, invoiceId: UUID): IO[Either[String, (String, Array[Byte])]] =
@@ -361,7 +417,7 @@ class BillingService(
              bill_discount_amount, coupon_code, coupon_discount_amount,
              loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
              cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-             payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+             payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
              notes, created_at
       FROM invoices
       WHERE id = $invoiceId
@@ -401,7 +457,7 @@ class BillingService(
                bill_discount_amount, coupon_code, coupon_discount_amount,
                loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
                cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
-               payment_mode, cash_tendered, change_returned, cashier_id, cashier_name,
+               payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
                notes, created_at
         FROM invoices
         WHERE tenant_id = $tenantId AND id = $invoiceId

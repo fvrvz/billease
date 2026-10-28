@@ -174,6 +174,17 @@ class Routes(
     }
   }
 
+  val updateInvoicePaymentStatusRoute = Endpoints.updateInvoicePaymentStatusEndpoint.serverLogic { (tenantId, invoiceId, token, req) =>
+    requireAuth(token).flatMap {
+      case Right(user) =>
+        requireTenantAccess(user, tenantId) match
+          case Right(_) =>
+            billingService.updatePaymentStatus(tenantId, invoiceId, req).map(Right(_))
+          case Left(err) => IO.pure(Left(err))
+      case Left(err) => IO.pure(Left(err))
+    }
+  }
+
   val listCustomersRoute = Endpoints.listCustomersEndpoint.serverLogic { (tenantId, token) =>
     requireAuth(token).flatMap {
       case Right(user) =>
@@ -267,6 +278,7 @@ class Routes(
     Endpoints.sendInvoiceWhatsappEndpoint,
     Endpoints.getInvoicePdfEndpoint,
     Endpoints.getPublicInvoicePdfEndpoint,
+    Endpoints.updateInvoicePaymentStatusEndpoint,
     Endpoints.listCustomersEndpoint,
     Endpoints.createCustomerEndpoint,
     Endpoints.recordKhataPaymentEndpoint,
@@ -294,6 +306,7 @@ class Routes(
     sendInvoiceWhatsappRoute,
     getInvoicePdfRoute,
     getPublicInvoicePdfRoute,
+    updateInvoicePaymentStatusRoute,
     listCustomersRoute,
     createCustomerRoute,
     recordKhataPaymentRoute,
