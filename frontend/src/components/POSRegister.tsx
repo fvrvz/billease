@@ -392,9 +392,9 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
 
             <For each={cart()}>
               {(item) => (
-                <div class="p-3 flex items-center justify-between gap-2">
-                  <div class="flex-1">
-                    <span class="text-xs font-bold text-slate-900 block leading-tight">
+                <div class="p-3 flex items-center justify-between gap-2 border-b border-slate-100 last:border-0">
+                  <div class="flex-1 min-w-0 pr-2 break-words whitespace-normal">
+                    <span class="text-xs font-bold text-slate-900 block leading-snug break-words whitespace-normal">
                       {item.product.name}
                     </span>
                     <span class="text-[11px] text-slate-500">

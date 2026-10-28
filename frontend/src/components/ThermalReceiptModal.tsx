@@ -109,25 +109,25 @@ export const ThermalReceiptModal: Component<ThermalReceiptModalProps> = (props) 
 
           {/* Itemized Table */}
           <div class="space-y-1">
-            <div class="flex justify-between font-bold border-b border-dashed border-slate-300 pb-1 text-[10px]">
-              <span class="flex-1">Item Description</span>
-              <span class="w-8 text-center">Qty</span>
-              <span class="w-12 text-right">Rate</span>
-              <span class="w-14 text-right">Total</span>
+            <div class="flex justify-between font-bold border-b border-dashed border-slate-300 pb-1 text-[10px] uppercase text-slate-700">
+              <span class="flex-1 pr-2">Item Description</span>
+              <span class="w-8 text-center shrink-0">Qty</span>
+              <span class="w-12 text-right shrink-0">Rate</span>
+              <span class="w-14 text-right shrink-0">Total</span>
             </div>
 
             <For each={props.invoice.items}>
               {(item) => (
-                <div class="flex justify-between items-baseline text-[10px]">
-                  <div class="flex-1 pr-1 truncate">
-                    <span class="font-bold">{item.productName}</span>
+                <div class="flex justify-between items-start text-[10px] py-1 border-b border-dotted border-slate-200/70">
+                  <div class="flex-1 pr-2 min-w-0 break-words whitespace-normal leading-snug">
+                    <span class="font-bold text-slate-900 block break-words whitespace-normal">{item.productName}</span>
                     <Show when={item.discountPercent > 0}>
-                      <span class="text-[9px] text-slate-500 block">(-{item.discountPercent}%)</span>
+                      <span class="text-[9px] text-rose-600 block font-normal">(-{item.discountPercent}% off)</span>
                     </Show>
                   </div>
-                  <span class="w-8 text-center font-bold">{item.quantity}</span>
-                  <span class="w-12 text-right">₹{item.unitPrice.toFixed(2)}</span>
-                  <span class="w-14 text-right font-bold">₹{item.totalAmount.toFixed(2)}</span>
+                  <span class="w-8 text-center font-bold text-slate-700 shrink-0">{item.quantity}</span>
+                  <span class="w-12 text-right text-slate-600 shrink-0">₹{item.unitPrice.toFixed(2)}</span>
+                  <span class="w-14 text-right font-bold text-slate-900 shrink-0">₹{item.totalAmount.toFixed(2)}</span>
                 </div>
               )}
             </For>
