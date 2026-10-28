@@ -13,7 +13,8 @@ import {
   LoginResponse,
   SalesOverview,
   SoldItemStats,
-  SendWhatsappBillResponse
+  SendWhatsappBillResponse,
+  UpdatePaymentStatusInput
 } from '../types';
 import { downloadInvoicePdfLocally } from '../utils/pdfGenerator';
 
@@ -334,6 +335,7 @@ export const apiClient = {
       roundOff,
       grandTotal,
       paymentMode: invoiceData.paymentMode,
+      paymentStatus: invoiceData.paymentStatus || 'COMPLETED',
       cashTendered: invoiceData.cashTendered || 0,
       changeReturned: Math.max(0, (invoiceData.cashTendered || 0) - grandTotal),
       cashierName: 'Counter Cashier',
@@ -342,8 +344,8 @@ export const apiClient = {
       items: invItems
     };
 
-    // Update customer Udhaar if applicable
-    if (invoiceData.customerId && invoiceData.paymentMode === 'CREDIT_KHATA') {
+    // Update customer Udhaar if applicable (only if payment is COMPLETED)
+    if (invoiceData.customerId && invoiceData.paymentMode === 'CREDIT_KHATA' && (invoiceData.paymentStatus || 'COMPLETED') === 'COMPLETED') {
       const customers = getFallbackCustomers();
       const c = customers.find(x => x.id === invoiceData.customerId);
       if (c) {
@@ -388,21 +390,25 @@ export const apiClient = {
       if (res.ok) return (await res.json()) as SalesOverview;
     } catch (_) {}
     const invs = getFallbackInvoices();
-    const totalSales = invs.reduce((sum, inv) => sum + inv.grandTotal, 0);
-    const totalItems = invs.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
-    const cash = invs.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
-    const upi = invs.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
-    const khata = invs.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
-    const card = invs.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
+    const completed = invs.filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
+    const pending = invs.filter(i => i.paymentStatus === 'PENDING');
+    const totalSales = completed.reduce((sum, inv) => sum + inv.grandTotal, 0);
+    const totalItems = completed.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
+    const cash = completed.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
+    const upi = completed.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
+    const khata = completed.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
+    const card = completed.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
     return {
       totalSales,
-      totalInvoices: invs.length,
+      totalInvoices: completed.length,
       totalItemsSold: totalItems,
       cashSales: cash,
       upiSales: upi,
       khataSales: khata,
       cardSales: card,
-      splitSales: 0
+      splitSales: 0,
+      pendingSales: pending.reduce((sum, inv) => sum + inv.grandTotal, 0),
+      pendingInvoices: pending.length
     };
   },
 
@@ -413,7 +419,7 @@ export const apiClient = {
       });
       if (res.ok) return (await res.json()) as SoldItemStats[];
     } catch (_) {}
-    const invs = getFallbackInvoices();
+    const invs = getFallbackInvoices().filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
     const itemMap = new Map<string, { qty: number; revenue: number; prices: number[]; count: number }>();
     invs.forEach(inv => {
       inv.items?.forEach(it => {
@@ -432,6 +438,38 @@ export const apiClient = {
       avgPrice: data.prices.length > 0 ? (data.prices.reduce((a, b) => a + b, 0) / data.prices.length) : 0,
       ordersCount: data.count
     })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  },
+
+  async updateInvoicePaymentStatus(
+    tenantId: string,
+    invoiceId: string,
+    token: string,
+    payload: UpdatePaymentStatusInput
+  ): Promise<Invoice | null> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/payment-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return (await res.json()) as Invoice | null;
+    } catch (_) {}
+    const invs = getFallbackInvoices();
+    const idx = invs.findIndex(i => i.id === invoiceId);
+    if (idx >= 0) {
+      invs[idx] = {
+        ...invs[idx],
+        paymentStatus: payload.paymentStatus,
+        paymentMode: payload.paymentMode || invs[idx].paymentMode,
+        notes: payload.notes || invs[idx].notes
+      };
+      localStorage.setItem('billease_invoices', JSON.stringify(invs));
+      return invs[idx];
+    }
+    return null;
   },
 
   async sendInvoiceWhatsapp(

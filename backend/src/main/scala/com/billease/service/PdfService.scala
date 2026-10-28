@@ -84,7 +84,12 @@ class PdfService:
     dateP.setAlignment(Element.ALIGN_RIGHT)
     metaCell.addElement(dateP)
 
-    val payModeP = new Paragraph(s"Payment: ${invoice.paymentMode}  |  Status: PAID", fontSuccess)
+    val (statusLabel, statusFont) = if invoice.paymentStatus == com.billease.domain.PaymentStatus.COMPLETED then
+      ("Status: PAID (DONE)", fontSuccess)
+    else
+      ("Status: PAYMENT PENDING", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, new Color(217, 119, 6)))
+
+    val payModeP = new Paragraph(s"Payment: ${invoice.paymentMode}  |  $statusLabel", statusFont)
     payModeP.setAlignment(Element.ALIGN_RIGHT)
     metaCell.addElement(payModeP)
 

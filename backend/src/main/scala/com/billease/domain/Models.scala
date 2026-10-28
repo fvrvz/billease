@@ -37,6 +37,14 @@ object PaymentMode:
   given Schema[PaymentMode] = Schema.string
   given Codec[PaymentMode] = enumCodec(PaymentMode.valueOf)
 
+enum PaymentStatus:
+  case COMPLETED, PENDING, CANCELLED
+
+object PaymentStatus:
+  given Meta[PaymentStatus] = Meta[String].imap(s => Try(PaymentStatus.valueOf(s)).getOrElse(PaymentStatus.COMPLETED))(_.toString)
+  given Schema[PaymentStatus] = Schema.string
+  given Codec[PaymentStatus] = enumCodec(PaymentStatus.valueOf)
+
 enum DiscountType:
   case PERCENTAGE, FLAT
 
@@ -310,6 +318,7 @@ case class CreateInvoiceRequest(
     couponCode: Option[String] = None,
     redeemLoyaltyPoints: Option[BigDecimal] = None,
     paymentMode: Option[PaymentMode] = None,
+    paymentStatus: Option[PaymentStatus] = None,
     cashTendered: Option[BigDecimal] = None,
     notes: Option[String] = None
 ) derives Codec.AsObject
@@ -357,6 +366,7 @@ case class InvoiceRow(
     roundOff: BigDecimal,
     grandTotal: BigDecimal,
     paymentMode: PaymentMode,
+    paymentStatus: PaymentStatus,
     cashTendered: BigDecimal,
     changeReturned: BigDecimal,
     cashierId: Option[UUID],
@@ -388,6 +398,7 @@ case class InvoiceRow(
       roundOff = roundOff,
       grandTotal = grandTotal,
       paymentMode = paymentMode,
+      paymentStatus = paymentStatus,
       cashTendered = cashTendered,
       changeReturned = changeReturned,
       cashierId = cashierId,
@@ -420,6 +431,7 @@ case class Invoice(
     roundOff: BigDecimal,
     grandTotal: BigDecimal,
     paymentMode: PaymentMode,
+    paymentStatus: PaymentStatus = PaymentStatus.COMPLETED,
     cashTendered: BigDecimal,
     changeReturned: BigDecimal,
     cashierId: Option[UUID],
@@ -427,6 +439,12 @@ case class Invoice(
     notes: Option[String],
     createdAt: Instant,
     items: List[InvoiceItem] = Nil
+) derives Codec.AsObject
+
+case class UpdatePaymentStatusRequest(
+    paymentStatus: PaymentStatus,
+    paymentMode: Option[PaymentMode] = None,
+    notes: Option[String] = None
 ) derives Codec.AsObject
 
 // Stock Alerts
@@ -454,7 +472,9 @@ case class SalesOverview(
     upiSales: BigDecimal,
     khataSales: BigDecimal,
     cardSales: BigDecimal,
-    splitSales: BigDecimal
+    splitSales: BigDecimal,
+    pendingSales: BigDecimal = BigDecimal(0),
+    pendingInvoices: Long = 0L
 ) derives Codec.AsObject
 
 case class SoldItemStats(

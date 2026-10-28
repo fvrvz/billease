@@ -1,6 +1,7 @@
 export type Role = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'MANAGER' | 'CASHIER';
 export type InvoiceType = 'TAX_INVOICE' | 'RETAIL_BILL';
 export type PaymentMode = 'CASH' | 'UPI' | 'CARD' | 'CREDIT_KHATA' | 'SPLIT';
+export type PaymentStatus = 'COMPLETED' | 'PENDING' | 'CANCELLED';
 export type DiscountType = 'PERCENTAGE' | 'FLAT';
 export type KhataEntryType = 'BILL_CREDIT' | 'PAYMENT_RECEIVED' | 'ADJUSTMENT';
 
@@ -145,7 +146,14 @@ export interface InvoiceCreateInput {
   couponDiscountAmount?: number;
   redeemLoyaltyPoints?: number;
   paymentMode: PaymentMode;
+  paymentStatus?: PaymentStatus;
   cashTendered?: number;
+  notes?: string;
+}
+
+export interface UpdatePaymentStatusInput {
+  paymentStatus: PaymentStatus;
+  paymentMode?: PaymentMode;
   notes?: string;
 }
 
@@ -191,6 +199,7 @@ export interface Invoice {
   roundOff: number;
   grandTotal: number;
   paymentMode: PaymentMode;
+  paymentStatus: PaymentStatus;
   cashTendered: number;
   changeReturned: number;
   cashierName?: string;
@@ -250,6 +259,8 @@ export interface SalesOverview {
   khataSales: number;
   cardSales: number;
   splitSales: number;
+  pendingSales: number;
+  pendingInvoices: number;
 }
 
 export interface SoldItemStats {

@@ -104,6 +104,13 @@ object Endpoints:
     .out(byteArrayBody)
     .errorOut(stringBody)
 
+  def updateInvoicePaymentStatusEndpoint = baseEndpoint.patch
+    .in("tenants" / path[UUID]("tenantId") / "invoices" / path[UUID]("invoiceId") / "payment-status")
+    .in(auth.bearer[String]())
+    .in(jsonBody[UpdatePaymentStatusRequest])
+    .out(jsonBody[Option[Invoice]])
+    .errorOut(stringBody)
+
   // Khata & Customers
   def listCustomersEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "customers")
