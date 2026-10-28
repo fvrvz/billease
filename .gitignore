@@ -1,0 +1,20 @@
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Scala & SBT
+target/
+backend/target/
+project/target/
+project/project/
+.bloop/
+.metals/
+*.class
+
+# OS & Environment
+.DS_Store
+.env
+.idea/
+.vscode/
