@@ -117,3 +117,9 @@ object Endpoints:
     .out(jsonBody[CouponValidationResult])
     .errorOut(stringBody)
 
+  val toggleCouponEndpoint = baseEndpoint.patch
+    .in("tenants" / path[UUID]("tenantId") / "coupons" / path[UUID]("couponId") / "toggle")
+    .in(auth.bearer[String]())
+    .out(jsonBody[Option[Coupon]])
+    .errorOut(stringBody)
+

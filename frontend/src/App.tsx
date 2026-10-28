@@ -1,6 +1,7 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Navbar } from './components/Navbar';
+import { LoginPage } from './components/LoginPage';
+import { Sidebar } from './components/Sidebar';
 import { POSRegister } from './components/POSRegister';
 import { ProductCatalog } from './components/ProductCatalog';
 import { CustomerKhata } from './components/CustomerKhata';
@@ -9,79 +10,67 @@ import { StoreSettings } from './components/StoreSettings';
 import { SuperAdminDashboard } from './components/SuperAdminDashboard';
 import { ThermalReceiptModal } from './components/ThermalReceiptModal';
 import { UpiQrModal } from './components/UpiQrModal';
-import { OidcAuthModal } from './components/OidcAuthModal';
 import { Invoice } from './types';
 
-const MainLayout: Component = () => {
-  const { tenant } = useAuth();
-  const [activeTab, setActiveTab] = createSignal('pos');
+const AppShell: Component = () => {
+  const { isAuthenticated } = useAuth();
 
-  // Modals state
+  return (
+    <Show when={isAuthenticated()} fallback={<LoginPage />}>
+      <AuthenticatedApp />
+    </Show>
+  );
+};
+
+const AuthenticatedApp: Component = () => {
+  const [activeTab, setActiveTab] = createSignal('pos');
   const [activeInvoice, setActiveInvoice] = createSignal<Invoice | null>(null);
   const [upiData, setUpiData] = createSignal<{ amount: number; upiUri: string } | null>(null);
-  const [showOidcModal, setShowOidcModal] = createSignal(false);
 
   const openUpiModal = (amount: number, upiUri: string) => {
     setUpiData({ amount, upiUri });
   };
 
   return (
-    <div class="min-h-screen bg-slate-50 flex flex-col font-sans">
-      
-      {/* Optional Store Top Banner */}
-      <Show when={tenant()?.bannerUrl}>
-        <div class="w-full h-24 overflow-hidden relative border-b border-slate-200">
-          <img
-            src={tenant()?.bannerUrl}
-            alt="Store Banner"
-            class="w-full h-full object-cover"
-          />
-          <div class="absolute inset-0 bg-gradient-to-r from-slate-900/60 to-transparent flex items-center px-6">
-            <h1 class="text-white text-xl font-black drop-shadow-md">
-              {tenant()?.name}
-            </h1>
-          </div>
-        </div>
-      </Show>
+    <div class="flex min-h-screen bg-slate-100">
+      {/* Sidebar Navigation */}
+      <Sidebar activeTab={activeTab()} setActiveTab={setActiveTab} />
 
-      {/* Main Top Navbar */}
-      <Navbar
-        activeTab={activeTab()}
-        setActiveTab={setActiveTab}
-        openOidcModal={() => setShowOidcModal(true)}
-      />
+      {/* Main Content Area */}
+      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-      {/* Workspace Body */}
-      <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        <Show when={activeTab() === 'pos'}>
-          <POSRegister
-            onBillGenerated={(inv) => setActiveInvoice(inv)}
-            openUpiModal={openUpiModal}
-          />
-        </Show>
+        {/* Page Body */}
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6">
+          <Show when={activeTab() === 'pos'}>
+            <POSRegister
+              onBillGenerated={(inv) => setActiveInvoice(inv)}
+              openUpiModal={openUpiModal}
+            />
+          </Show>
 
-        <Show when={activeTab() === 'products'}>
-          <ProductCatalog />
-        </Show>
+          <Show when={activeTab() === 'products'}>
+            <ProductCatalog />
+          </Show>
 
-        <Show when={activeTab() === 'khata'}>
-          <CustomerKhata />
-        </Show>
+          <Show when={activeTab() === 'khata'}>
+            <CustomerKhata />
+          </Show>
 
-        <Show when={activeTab() === 'coupons'}>
-          <CouponLoyalty />
-        </Show>
+          <Show when={activeTab() === 'coupons'}>
+            <CouponLoyalty />
+          </Show>
 
-        <Show when={activeTab() === 'settings'}>
-          <StoreSettings />
-        </Show>
+          <Show when={activeTab() === 'settings'}>
+            <StoreSettings />
+          </Show>
 
-        <Show when={activeTab() === 'superadmin'}>
-          <SuperAdminDashboard />
-        </Show>
-      </main>
+          <Show when={activeTab() === 'superadmin'}>
+            <SuperAdminDashboard />
+          </Show>
+        </main>
+      </div>
 
-      {/* Thermal Receipt Modal (Triggered on Bill creation) */}
+      {/* Modals */}
       <Show when={activeInvoice()}>
         <ThermalReceiptModal
           invoice={activeInvoice()!}
@@ -89,7 +78,6 @@ const MainLayout: Component = () => {
         />
       </Show>
 
-      {/* Dynamic UPI QR Modal (Triggered on UPI checkout) */}
       <Show when={upiData()}>
         <UpiQrModal
           amount={upiData()!.amount}
@@ -97,19 +85,6 @@ const MainLayout: Component = () => {
           onClose={() => setUpiData(null)}
         />
       </Show>
-
-      {/* AuthForest OIDC Modal */}
-      <Show when={showOidcModal()}>
-        <OidcAuthModal
-          onClose={() => setShowOidcModal(false)}
-        />
-      </Show>
-
-      {/* Compact Footer */}
-      <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-400">
-        <span>Billease • Indian Retail & POS Engine • Secured by AuthForest OIDC & Scala 3</span>
-      </footer>
-
     </div>
   );
 };
@@ -117,7 +92,7 @@ const MainLayout: Component = () => {
 export const App: Component = () => {
   return (
     <AuthProvider>
-      <MainLayout />
+      <AppShell />
     </AuthProvider>
   );
 };
