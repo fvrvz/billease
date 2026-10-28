@@ -1,0 +1,95 @@
+name: PR Policy & Branch Guard
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+
+jobs:
+  validate-pr-policy:
+    name: validate-pr-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code with Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR Source Branch
+        run: |
+          TARGET_BRANCH="${{ github.base_ref }}"
+          SOURCE_BRANCH="${{ github.head_ref }}"
+          echo "🔍 Checking PR: source='$SOURCE_BRANCH' -> target='$TARGET_BRANCH'"
+
+          if [ "$TARGET_BRANCH" = "main" ]; then
+            if [ "$SOURCE_BRANCH" != "develop" ] && ! [[ "$SOURCE_BRANCH" =~ ^hotfix/ ]]; then
+              echo "❌ Error: Pull Requests targeting 'main' must only originate from 'develop' or 'hotfix/*' branches."
+              echo "   Received source branch: '$SOURCE_BRANCH'"
+              exit 1
+            fi
+            echo "✅ Source branch valid for 'main' target ('$SOURCE_BRANCH')."
+
+          elif [ "$TARGET_BRANCH" = "develop" ]; then
+            CONVENTIONAL_BRANCH_REGEX="^(feature|bugfix|hotfix|docs|refactor|chore|test)/.+"
+            if ! [[ "$SOURCE_BRANCH" =~ $CONVENTIONAL_BRANCH_REGEX ]]; then
+              echo "❌ Error: Pull Requests targeting 'develop' must use conventional branch prefixes:"
+              echo "   feature/*, bugfix/*, hotfix/*, docs/*, refactor/*, chore/*, test/*"
+              echo "   Received source branch: '$SOURCE_BRANCH'"
+              exit 1
+            fi
+            echo "✅ Source branch follows conventional naming ('$SOURCE_BRANCH')."
+          fi
+
+      - name: Validate PR Title (Conventional Commits)
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          echo "🔍 Validating PR title: '$PR_TITLE'"
+          CONVENTIONAL_REGEX="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .+"
+
+          if ! [[ "$PR_TITLE" =~ $CONVENTIONAL_REGEX ]]; then
+            echo "❌ Error: PR title does not follow Conventional Commits format!"
+            echo "   Expected format: <type>(<scope>): <summary>  (e.g., feat(pos): add upi payment qr)"
+            echo "   Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            echo "   Received: '$PR_TITLE'"
+            exit 1
+          fi
+          echo "✅ PR title follows Conventional Commits format."
+
+      - name: Validate Commits (Conventional Commits)
+        run: |
+          echo "🔍 Validating all commits in PR for Conventional Commits format..."
+          CONVENTIONAL_REGEX="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\-\.\/]+\))?(!)?: .+"
+          
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          INVALID_COMMITS=0
+          
+          while IFS= read -r line; do
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MSG=$(echo "$line" | cut -d' ' -f2-)
+            
+            # Skip merge commits
+            if [[ "$MSG" =~ ^Merge ]]; then
+              continue
+            fi
+            
+            if ! [[ "$MSG" =~ $CONVENTIONAL_REGEX ]]; then
+              echo "❌ Invalid commit message in $HASH: '$MSG'"
+              INVALID_COMMITS=$((INVALID_COMMITS + 1))
+            else
+              echo "✅ Valid commit $HASH: '$MSG'"
+            fi
+          done < <(git log --format="%h %s" "$BASE_SHA..$HEAD_SHA")
+          
+          if [ "$INVALID_COMMITS" -gt 0 ]; then
+            echo "❌ Found $INVALID_COMMITS non-conventional commit(s). Please reword your commit messages."
+            exit 1
+          fi
+          echo "✅ All commits follow Conventional Commits format."
