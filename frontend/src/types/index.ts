@@ -1,0 +1,141 @@
+export type Role = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'MANAGER' | 'CASHIER';
+export type InvoiceType = 'TAX_INVOICE' | 'RETAIL_BILL';
+export type PaymentMode = 'CASH' | 'UPI' | 'CARD' | 'CREDIT_KHATA' | 'SPLIT';
+export type DiscountType = 'PERCENTAGE' | 'FLAT';
+export type KhataEntryType = 'BILL_CREDIT' | 'PAYMENT_RECEIVED' | 'ADJUSTMENT';
+
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+  legalName?: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  stateCode: string;
+  hasGst: boolean;
+  gstin?: string;
+  isCompositionScheme: boolean;
+  logoUrl?: string;
+  bannerUrl?: string;
+  invoicePrefix: string;
+  invoiceFooter: string;
+  thermalWidthMm: number;
+  upiVpa?: string;
+  upiPayeeName?: string;
+  loyaltyPointsPer100: number;
+  loyaltyPointValueRs: number;
+  isActive: boolean;
+}
+
+export interface User {
+  id: string;
+  tenantId?: string;
+  username: string;
+  fullName: string;
+  email?: string;
+  phone?: string;
+  role: Role;
+  isActive: boolean;
+}
+
+export interface Product {
+  id: string;
+  tenantId: string;
+  categoryId?: string;
+  name: string;
+  barcode?: string;
+  sku?: string;
+  unit: string;
+  hsnCode: string;
+  gstRate: number;
+  isPriceTaxInclusive: boolean;
+  minStockAlert: number;
+  isActive: boolean;
+  currentStock: number;
+  mrp: number;
+  sellingPrice: number;
+}
+
+export interface Customer {
+  id: string;
+  tenantId: string;
+  name: string;
+  phone: string;
+  gstin?: string;
+  address?: string;
+  creditLimit: number;
+  currentDue: number;
+  loyaltyPoints: number;
+}
+
+export interface Coupon {
+  id: string;
+  tenantId: string;
+  code: string;
+  discountType: DiscountType;
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountCap?: number;
+  validUntil?: string;
+  usageCount: number;
+  maxUsage: number;
+  isActive: boolean;
+}
+
+export interface CartItem {
+  product: Product;
+  quantity: number;
+  discountPercent: number;
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoiceId: string;
+  tenantId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  mrp: number;
+  discountPercent: number;
+  discountAmount: number;
+  gstRate: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalAmount: number;
+}
+
+export interface Invoice {
+  id: string;
+  tenantId: string;
+  invoiceNumber: string;
+  invoiceType: InvoiceType;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  subtotal: number;
+  itemDiscountTotal: number;
+  billDiscountPercent: number;
+  billDiscountAmount: number;
+  couponCode?: string;
+  couponDiscountAmount: number;
+  loyaltyPointsRedeemed: number;
+  loyaltyDiscountAmount: number;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  roundOff: number;
+  grandTotal: number;
+  paymentMode: PaymentMode;
+  cashTendered: number;
+  changeReturned: number;
+  cashierName?: string;
+  notes?: string;
+  createdAt: string;
+  items?: InvoiceItem[];
+}
