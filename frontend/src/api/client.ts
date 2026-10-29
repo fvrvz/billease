@@ -14,8 +14,14 @@ import {
   SalesOverview,
   SoldItemStats,
   SendWhatsappBillResponse,
-  UpdatePaymentStatusInput
+  UpdatePaymentStatusInput,
+  PagedResponse,
+  ProductFilterParams,
+  InvoiceFilterParams,
+  CustomerFilterParams,
+  SoldItemFilterParams
 } from '../types';
+import { apiCache } from '../utils/cache';
 import { downloadInvoicePdfLocally } from '../utils/pdfGenerator';
 
 const API_BASE = '/api';
@@ -33,15 +39,22 @@ export const apiClient = {
     return null;
   },
 
-  async getTenant(tenantId: string): Promise<Tenant> {
-    try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}`);
-      if (res.ok) return (await res.json()) as Tenant;
-    } catch (_) {}
-    return getFallbackTenant();
+  async getTenant(tenantId: string, forceRefresh = false): Promise<Tenant> {
+    return apiCache.fetchWithCache(
+      `tenant:${tenantId}`,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}`);
+          if (res.ok) return (await res.json()) as Tenant;
+        } catch (_) {}
+        return getFallbackTenant();
+      },
+      { ttlMs: 300_000, forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
   async updateTenant(tenantId: string, token: string, updates: Partial<Tenant>): Promise<Tenant> {
+    apiCache.invalidate(`tenant:${tenantId}`);
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}`, {
         method: 'PUT',
@@ -51,24 +64,56 @@ export const apiClient = {
         },
         body: JSON.stringify(updates)
       });
-      if (res.ok) return (await res.json()) as Tenant;
+      if (res.ok) {
+        const updated = (await res.json()) as Tenant;
+        apiCache.set(`tenant:${tenantId}`, updated, 300_000);
+        return updated;
+      }
     } catch (_) {}
     const current = getFallbackTenant();
     const updated: Tenant = { ...current, ...updates };
     localStorage.setItem('billease_tenant', JSON.stringify(updated));
+    apiCache.set(`tenant:${tenantId}`, updated, 300_000);
     return updated;
   },
 
-  async listProducts(tenantId: string, query?: string): Promise<Product[]> {
-    try {
-      const q = query ? `?q=${encodeURIComponent(query)}` : '';
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/products${q}`);
-      if (res.ok) return (await res.json()) as Product[];
-    } catch (_) {}
-    return getFallbackProducts(query);
+  async listProducts(
+    tenantId: string,
+    params?: ProductFilterParams | string
+  ): Promise<PagedResponse<Product>> {
+    const filter: ProductFilterParams =
+      typeof params === 'string' ? { q: params } : params || {};
+    const queryParts: string[] = [];
+    if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
+    if (filter.categoryId) queryParts.push(`categoryId=${encodeURIComponent(filter.categoryId)}`);
+    if (filter.inStockOnly !== undefined) queryParts.push(`inStockOnly=${filter.inStockOnly}`);
+    if (filter.page) queryParts.push(`page=${filter.page}`);
+    if (filter.limit) queryParts.push(`limit=${filter.limit}`);
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+    const cacheKey = `products:${tenantId}:${qs}`;
+    return apiCache.fetchWithCache(
+      cacheKey,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}/products${qs}`);
+          if (res.ok) return (await res.json()) as PagedResponse<Product>;
+        } catch (_) {}
+        const fallbackList = getFallbackProducts(filter.q);
+        return {
+          items: fallbackList,
+          total: fallbackList.length,
+          page: filter.page || 1,
+          limit: filter.limit || 50,
+          totalPages: Math.max(1, Math.ceil(fallbackList.length / (filter.limit || 50)))
+        };
+      },
+      { ttlMs: 120_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
   async createProduct(tenantId: string, token: string, product: ProductCreateInput): Promise<Product> {
+    apiCache.invalidate('products:');
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/products`, {
         method: 'POST',
@@ -102,17 +147,44 @@ export const apiClient = {
     return newProduct;
   },
 
-  async listCustomers(tenantId: string, token: string): Promise<Customer[]> {
-    try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) return (await res.json()) as Customer[];
-    } catch (_) {}
-    return getFallbackCustomers();
+  async listCustomers(
+    tenantId: string,
+    token: string,
+    params?: CustomerFilterParams
+  ): Promise<PagedResponse<Customer>> {
+    const filter = params || {};
+    const queryParts: string[] = [];
+    if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
+    if (filter.withDueOnly !== undefined) queryParts.push(`withDueOnly=${filter.withDueOnly}`);
+    if (filter.page) queryParts.push(`page=${filter.page}`);
+    if (filter.limit) queryParts.push(`limit=${filter.limit}`);
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+    const cacheKey = `customers:${tenantId}:${qs}`;
+    return apiCache.fetchWithCache(
+      cacheKey,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers${qs}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) return (await res.json()) as PagedResponse<Customer>;
+        } catch (_) {}
+        const fallbackList = getFallbackCustomers();
+        return {
+          items: fallbackList,
+          total: fallbackList.length,
+          page: filter.page || 1,
+          limit: filter.limit || 50,
+          totalPages: Math.max(1, Math.ceil(fallbackList.length / (filter.limit || 50)))
+        };
+      },
+      { ttlMs: 120_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
   async createCustomer(tenantId: string, token: string, customer: CustomerCreateInput): Promise<Customer> {
+    apiCache.invalidate('customers:');
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers`, {
         method: 'POST',
@@ -142,6 +214,7 @@ export const apiClient = {
   },
 
   async recordKhataPayment(tenantId: string, token: string, customerId: string, amount: number, paymentMethod: string, notes?: string): Promise<Customer> {
+    apiCache.invalidate('customers:');
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers/payment`, {
         method: 'POST',
@@ -251,6 +324,11 @@ export const apiClient = {
   },
 
   async createInvoice(tenantId: string, token: string, invoiceData: InvoiceCreateInput): Promise<Invoice> {
+    apiCache.invalidate('invoices:');
+    apiCache.invalidate('sales:');
+    apiCache.invalidate('sold-items:');
+    apiCache.invalidate('products:');
+    apiCache.invalidate('customers:');
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices`, {
         method: 'POST',
@@ -372,72 +450,151 @@ export const apiClient = {
     return invoice;
   },
 
-  async listInvoices(tenantId: string, token: string): Promise<Invoice[]> {
-    try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) return (await res.json()) as Invoice[];
-    } catch (_) {}
-    return getFallbackInvoices();
+  async listInvoices(
+    tenantId: string,
+    token: string,
+    params?: InvoiceFilterParams
+  ): Promise<PagedResponse<Invoice>> {
+    const filter = params || {};
+    const queryParts: string[] = [];
+    if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
+    if (filter.paymentMode) queryParts.push(`paymentMode=${encodeURIComponent(filter.paymentMode)}`);
+    if (filter.paymentStatus) queryParts.push(`paymentStatus=${encodeURIComponent(filter.paymentStatus)}`);
+    if (filter.page) queryParts.push(`page=${filter.page}`);
+    if (filter.limit) queryParts.push(`limit=${filter.limit}`);
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+    const cacheKey = `invoices:${tenantId}:${qs}`;
+    return apiCache.fetchWithCache(
+      cacheKey,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices${qs}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) return (await res.json()) as PagedResponse<Invoice>;
+        } catch (_) {}
+        const allInvs = getFallbackInvoices();
+        let filtered = allInvs;
+        if (filter.q) {
+          const qLower = filter.q.toLowerCase();
+          filtered = filtered.filter(i =>
+            i.invoiceNumber.toLowerCase().includes(qLower) ||
+            (i.customerName && i.customerName.toLowerCase().includes(qLower)) ||
+            (i.customerPhone && i.customerPhone.toLowerCase().includes(qLower))
+          );
+        }
+        if (filter.paymentMode) {
+          filtered = filtered.filter(i => i.paymentMode === filter.paymentMode);
+        }
+        if (filter.paymentStatus) {
+          filtered = filtered.filter(i => (i.paymentStatus || 'COMPLETED') === filter.paymentStatus);
+        }
+        const page = filter.page || 1;
+        const limit = filter.limit || 50;
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        const start = (page - 1) * limit;
+        const items = filtered.slice(start, start + limit);
+        return { items, total, page, limit, totalPages };
+      },
+      { ttlMs: 60_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
-  async getSalesOverview(tenantId: string, token: string): Promise<SalesOverview> {
-    try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/overview`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) return (await res.json()) as SalesOverview;
-    } catch (_) {}
-    const invs = getFallbackInvoices();
-    const completed = invs.filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
-    const pending = invs.filter(i => i.paymentStatus === 'PENDING');
-    const totalSales = completed.reduce((sum, inv) => sum + inv.grandTotal, 0);
-    const totalItems = completed.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
-    const cash = completed.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
-    const upi = completed.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
-    const khata = completed.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
-    const card = completed.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
-    return {
-      totalSales,
-      totalInvoices: completed.length,
-      totalItemsSold: totalItems,
-      cashSales: cash,
-      upiSales: upi,
-      khataSales: khata,
-      cardSales: card,
-      splitSales: 0,
-      pendingSales: pending.reduce((sum, inv) => sum + inv.grandTotal, 0),
-      pendingInvoices: pending.length
-    };
+  async getSalesOverview(tenantId: string, token: string, forceRefresh = false): Promise<SalesOverview> {
+    const cacheKey = `sales:overview:${tenantId}`;
+    return apiCache.fetchWithCache(
+      cacheKey,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/overview`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) return (await res.json()) as SalesOverview;
+        } catch (_) {}
+        const invs = getFallbackInvoices();
+        const completed = invs.filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
+        const pending = invs.filter(i => i.paymentStatus === 'PENDING');
+        const totalSales = completed.reduce((sum, inv) => sum + inv.grandTotal, 0);
+        const totalItems = completed.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
+        const cash = completed.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
+        const upi = completed.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
+        const khata = completed.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
+        const card = completed.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
+        return {
+          totalSales,
+          totalInvoices: completed.length,
+          totalItemsSold: totalItems,
+          cashSales: cash,
+          upiSales: upi,
+          khataSales: khata,
+          cardSales: card,
+          splitSales: 0,
+          pendingSales: pending.reduce((sum, inv) => sum + inv.grandTotal, 0),
+          pendingInvoices: pending.length
+        };
+      },
+      { ttlMs: 30_000, forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
-  async getSoldItems(tenantId: string, token: string): Promise<SoldItemStats[]> {
-    try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/sold-items`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) return (await res.json()) as SoldItemStats[];
-    } catch (_) {}
-    const invs = getFallbackInvoices().filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
-    const itemMap = new Map<string, { qty: number; revenue: number; prices: number[]; count: number }>();
-    invs.forEach(inv => {
-      inv.items?.forEach(it => {
-        const existing = itemMap.get(it.productName) || { qty: 0, revenue: 0, prices: [], count: 0 };
-        existing.qty += it.quantity;
-        existing.revenue += it.totalAmount;
-        existing.prices.push(it.unitPrice);
-        existing.count += 1;
-        itemMap.set(it.productName, existing);
-      });
-    });
-    return Array.from(itemMap.entries()).map(([productName, data]) => ({
-      productName,
-      totalQuantity: data.qty,
-      totalRevenue: data.revenue,
-      avgPrice: data.prices.length > 0 ? (data.prices.reduce((a, b) => a + b, 0) / data.prices.length) : 0,
-      ordersCount: data.count
-    })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  async getSoldItems(
+    tenantId: string,
+    token: string,
+    params?: SoldItemFilterParams
+  ): Promise<PagedResponse<SoldItemStats>> {
+    const filter = params || {};
+    const queryParts: string[] = [];
+    if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
+    if (filter.page) queryParts.push(`page=${filter.page}`);
+    if (filter.limit) queryParts.push(`limit=${filter.limit}`);
+    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+    const cacheKey = `sold-items:${tenantId}:${qs}`;
+    return apiCache.fetchWithCache(
+      cacheKey,
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/sold-items${qs}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) return (await res.json()) as PagedResponse<SoldItemStats>;
+        } catch (_) {}
+        const invs = getFallbackInvoices().filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
+        const itemMap = new Map<string, { qty: number; revenue: number; prices: number[]; count: number }>();
+        invs.forEach(inv => {
+          inv.items?.forEach(it => {
+            const existing = itemMap.get(it.productName) || { qty: 0, revenue: 0, prices: [], count: 0 };
+            existing.qty += it.quantity;
+            existing.revenue += it.totalAmount;
+            existing.prices.push(it.unitPrice);
+            existing.count += 1;
+            itemMap.set(it.productName, existing);
+          });
+        });
+        let list = Array.from(itemMap.entries()).map(([productName, data]) => ({
+          productName,
+          totalQuantity: data.qty,
+          totalRevenue: data.revenue,
+          avgPrice: data.prices.length > 0 ? (data.prices.reduce((a, b) => a + b, 0) / data.prices.length) : 0,
+          ordersCount: data.count
+        })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+        if (filter.q) {
+          const qLower = filter.q.toLowerCase();
+          list = list.filter(item => item.productName.toLowerCase().includes(qLower));
+        }
+        const page = filter.page || 1;
+        const limit = filter.limit || 50;
+        const total = list.length;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        const start = (page - 1) * limit;
+        const items = list.slice(start, start + limit);
+        return { items, total, page, limit, totalPages };
+      },
+      { ttlMs: 60_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+    );
   },
 
   async updateInvoicePaymentStatus(
@@ -446,6 +603,10 @@ export const apiClient = {
     token: string,
     payload: UpdatePaymentStatusInput
   ): Promise<Invoice | null> {
+    apiCache.invalidate('invoices:');
+    apiCache.invalidate('sales:');
+    apiCache.invalidate('sold-items:');
+    apiCache.invalidate('customers:');
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/payment-status`, {
         method: 'PATCH',

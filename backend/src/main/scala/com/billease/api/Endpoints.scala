@@ -8,6 +8,8 @@ import java.util.UUID
 
 object Endpoints:
 
+  given invoiceListSchema: Schema[List[Invoice]] = Schema.schemaForIterable[Invoice, List]
+
   def baseEndpoint = endpoint.in("api")
 
   // Auth & Login
@@ -40,7 +42,11 @@ object Endpoints:
   def listProductsEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "products")
     .in(query[Option[String]]("q"))
-    .out(jsonBody[List[Product]])
+    .in(query[Option[UUID]]("categoryId"))
+    .in(query[Option[Boolean]]("inStockOnly"))
+    .in(query[Option[Int]]("page"))
+    .in(query[Option[Int]]("limit"))
+    .out(jsonBody[PagedProducts])
     .errorOut(stringBody)
 
   def createProductEndpoint = baseEndpoint.post
@@ -67,7 +73,12 @@ object Endpoints:
   def listInvoicesEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "invoices")
     .in(auth.bearer[String]())
-    .out(jsonBody[List[Invoice]])
+    .in(query[Option[String]]("q"))
+    .in(query[Option[String]]("paymentMode"))
+    .in(query[Option[String]]("paymentStatus"))
+    .in(query[Option[Int]]("page"))
+    .in(query[Option[Int]]("limit"))
+    .out(jsonBody[PagedInvoices])
     .errorOut(stringBody)
 
   def getSalesOverviewEndpoint = baseEndpoint.get
@@ -79,7 +90,10 @@ object Endpoints:
   def getSoldItemsEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "sales" / "sold-items")
     .in(auth.bearer[String]())
-    .out(jsonBody[List[SoldItemStats]])
+    .in(query[Option[String]]("q"))
+    .in(query[Option[Int]]("page"))
+    .in(query[Option[Int]]("limit"))
+    .out(jsonBody[PagedSoldItems])
     .errorOut(stringBody)
 
   def sendInvoiceWhatsappEndpoint = baseEndpoint.post
@@ -115,7 +129,11 @@ object Endpoints:
   def listCustomersEndpoint = baseEndpoint.get
     .in("tenants" / path[UUID]("tenantId") / "customers")
     .in(auth.bearer[String]())
-    .out(jsonBody[List[Customer]])
+    .in(query[Option[String]]("q"))
+    .in(query[Option[Boolean]]("withDueOnly"))
+    .in(query[Option[Int]]("page"))
+    .in(query[Option[Int]]("limit"))
+    .out(jsonBody[PagedCustomers])
     .errorOut(stringBody)
 
   def createCustomerEndpoint = baseEndpoint.post

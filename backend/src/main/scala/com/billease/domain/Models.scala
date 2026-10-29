@@ -496,3 +496,37 @@ case class SendWhatsappBillResponse(
     message: String
 ) derives Codec.AsObject
 
+// Pagination & Filtering
+case class PagedProducts(
+    items: List[Product],
+    total: Long,
+    page: Int,
+    limit: Int,
+    totalPages: Int
+) derives Codec.AsObject
+
+case class PagedInvoices(
+    items: List[Invoice],
+    total: Long,
+    page: Int,
+    limit: Int,
+    totalPages: Int
+) derives Codec.AsObject
+
+case class PagedCustomers(
+    items: List[Customer],
+    total: Long,
+    page: Int,
+    limit: Int,
+    totalPages: Int
+) derives Codec.AsObject
+
+case class PagedSoldItems(
+    items: List[SoldItemStats],
+    total: Long,
+    page: Int,
+    limit: Int,
+    totalPages: Int
+) derives Codec.AsObject
+
+
