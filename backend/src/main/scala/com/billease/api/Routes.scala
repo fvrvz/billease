@@ -65,12 +65,15 @@ class Routes(
     }
   }
 
-  val listProductsRoute = Endpoints.listProductsEndpoint.serverLogic { (tenantId, queryOpt) =>
-    queryOpt match
-      case Some(q) if q.trim.nonEmpty =>
-        productService.searchProducts(tenantId, q.trim).map(Right(_))
-      case _ =>
-        productService.listProducts(tenantId).map(Right(_))
+  val listProductsRoute = Endpoints.listProductsEndpoint.serverLogic { (tenantId, qOpt, categoryIdOpt, inStockOnlyOpt, pageOpt, limitOpt) =>
+    productService.listProductsPaged(
+      tenantId,
+      qOpt,
+      categoryIdOpt,
+      inStockOnlyOpt,
+      pageOpt.getOrElse(1),
+      limitOpt.getOrElse(50)
+    ).map(Right(_))
   }
 
   val createProductRoute = Endpoints.createProductEndpoint.serverLogic { (tenantId, token, req) =>
@@ -109,11 +112,19 @@ class Routes(
     }
   }
 
-  val listInvoicesRoute = Endpoints.listInvoicesEndpoint.serverLogic { (tenantId, token) =>
+  val listInvoicesRoute = Endpoints.listInvoicesEndpoint.serverLogic { (tenantId, token, qOpt, paymentModeOpt, paymentStatusOpt, pageOpt, limitOpt) =>
     requireAuth(token).flatMap {
       case Right(user) =>
         requireTenantAccess(user, tenantId) match
-          case Right(_) => billingService.listRecentInvoices(tenantId, 100).map(Right(_))
+          case Right(_) =>
+            billingService.listInvoicesPaged(
+              tenantId,
+              qOpt,
+              paymentModeOpt,
+              paymentStatusOpt,
+              pageOpt.getOrElse(1),
+              limitOpt.getOrElse(50)
+            ).map(Right(_))
           case Left(err) => IO.pure(Left(err))
       case Left(err) => IO.pure(Left(err))
     }
@@ -129,11 +140,17 @@ class Routes(
     }
   }
 
-  val getSoldItemsRoute = Endpoints.getSoldItemsEndpoint.serverLogic { (tenantId, token) =>
+  val getSoldItemsRoute = Endpoints.getSoldItemsEndpoint.serverLogic { (tenantId, token, qOpt, pageOpt, limitOpt) =>
     requireAuth(token).flatMap {
       case Right(user) =>
         requireTenantAccess(user, tenantId) match
-          case Right(_) => billingService.getSoldItems(tenantId).map(Right(_))
+          case Right(_) =>
+            billingService.getSoldItemsPaged(
+              tenantId,
+              qOpt,
+              pageOpt.getOrElse(1),
+              limitOpt.getOrElse(50)
+            ).map(Right(_))
           case Left(err) => IO.pure(Left(err))
       case Left(err) => IO.pure(Left(err))
     }
@@ -185,11 +202,18 @@ class Routes(
     }
   }
 
-  val listCustomersRoute = Endpoints.listCustomersEndpoint.serverLogic { (tenantId, token) =>
+  val listCustomersRoute = Endpoints.listCustomersEndpoint.serverLogic { (tenantId, token, qOpt, withDueOnlyOpt, pageOpt, limitOpt) =>
     requireAuth(token).flatMap {
       case Right(user) =>
         requireTenantAccess(user, tenantId) match
-          case Right(_) => khataService.listCustomers(tenantId).map(Right(_))
+          case Right(_) =>
+            khataService.listCustomersPaged(
+              tenantId,
+              qOpt,
+              withDueOnlyOpt,
+              pageOpt.getOrElse(1),
+              limitOpt.getOrElse(50)
+            ).map(Right(_))
           case Left(err) => IO.pure(Left(err))
       case Left(err) => IO.pure(Left(err))
     }

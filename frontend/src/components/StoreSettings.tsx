@@ -1,6 +1,7 @@
 import { Component, createSignal, onMount, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { Settings, QrCode, Printer, Check } from 'lucide-solid';
+import { Settings, QrCode, Printer, Check, Upload, Image as ImageIcon, Trash2, Store } from 'lucide-solid';
+import { compressStoreLogo } from '../utils/imageCompressor';
 
 export const StoreSettings: Component = () => {
   const { tenant, updateTenantData } = useAuth();
@@ -17,9 +18,10 @@ export const StoreSettings: Component = () => {
   const [gstin, setGstin] = createSignal('');
   const [stateCode, setStateCode] = createSignal('27');
 
-  // Branding
+  // Branding (Logo only, banner removed)
   const [logoUrl, setLogoUrl] = createSignal('');
-  const [bannerUrl, setBannerUrl] = createSignal('');
+  const [isCompressingLogo, setIsCompressingLogo] = createSignal(false);
+  const [logoUploadError, setLogoUploadError] = createSignal('');
 
   // Receipt & Print
   const [invoicePrefix, setInvoicePrefix] = createSignal('INV');
@@ -46,13 +48,30 @@ export const StoreSettings: Component = () => {
     setGstin(t.gstin || '');
     setStateCode(t.stateCode || '27');
     setLogoUrl(t.logoUrl || '');
-    setBannerUrl(t.bannerUrl || '');
     setInvoicePrefix(t.invoicePrefix);
     setInvoiceFooter(t.invoiceFooter);
     setThermalWidthMm(t.thermalWidthMm);
     setUpiVpa(t.upiVpa || '');
     setUpiPayeeName(t.upiPayeeName || '');
   });
+
+  const handleLogoFileChange = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    setLogoUploadError('');
+    setIsCompressingLogo(true);
+    try {
+      const compressedDataUrl = await compressStoreLogo(file, 320, 0.88);
+      setLogoUrl(compressedDataUrl);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to compress image';
+      setLogoUploadError(msg);
+    } finally {
+      setIsCompressingLogo(false);
+      input.value = '';
+    }
+  };
 
   const handleSave = async (e: Event) => {
     e.preventDefault();
@@ -75,7 +94,6 @@ export const StoreSettings: Component = () => {
       gstin: hasGst() ? gstin().trim().toUpperCase() : undefined,
       stateCode: detectedState,
       logoUrl: logoUrl().trim() || undefined,
-      bannerUrl: bannerUrl().trim() || undefined,
       invoicePrefix: invoicePrefix().trim().toUpperCase(),
       invoiceFooter: invoiceFooter().trim(),
       thermalWidthMm: thermalWidthMm(),
@@ -242,39 +260,99 @@ export const StoreSettings: Component = () => {
           </Show>
         </div>
 
-        {/* 3. Visual Branding (Logo & Banner) */}
+        {/* 3. Visual Branding (Store Logo) */}
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-          <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
-            Store Visuals & Logo
-          </h3>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="border-b border-slate-100 pb-2 flex items-center justify-between">
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Store Logo Image URL</label>
-              <input
-                type="url"
-                placeholder="https://..."
-                value={logoUrl()}
-                onInput={(e) => setLogoUrl(e.currentTarget.value)}
-                class="w-full p-2.5 rounded-lg border border-slate-200 font-mono text-xs"
-              />
-              <Show when={logoUrl()}>
-                <img src={logoUrl()} alt="Preview" class="mt-2 w-14 h-14 rounded-lg object-cover border border-slate-200" />
-              </Show>
+              <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <ImageIcon class="w-4 h-4 text-emerald-600" />
+                Store Brand Logo
+              </h3>
+              <p class="text-[11px] text-slate-500 mt-0.5">
+                Upload your store logo or paste an image URL. If not provided, a default store emblem is used.
+              </p>
             </div>
 
-            <div>
-              <label class="block font-bold text-slate-700 mb-1">Store Banner Image URL</label>
-              <input
-                type="url"
-                placeholder="https://..."
-                value={bannerUrl()}
-                onInput={(e) => setBannerUrl(e.currentTarget.value)}
-                class="w-full p-2.5 rounded-lg border border-slate-200 font-mono text-xs"
-              />
-              <Show when={bannerUrl()}>
-                <img src={bannerUrl()} alt="Banner Preview" class="mt-2 h-14 w-full rounded-lg object-cover border border-slate-200" />
+            <Show when={logoUrl()}>
+              <button
+                type="button"
+                onClick={() => setLogoUrl('')}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                title="Remove custom logo and revert to default"
+              >
+                <Trash2 class="w-3.5 h-3.5" />
+                Use Default
+              </button>
+            </Show>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Logo Preview */}
+            <div class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <Show
+                when={logoUrl()}
+                fallback={
+                  <div class="w-24 h-24 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center shadow-md">
+                    <Store class="w-10 h-10 text-emerald-400" />
+                    <span class="text-[9px] font-bold text-slate-300 mt-1 uppercase tracking-wider">Default</span>
+                  </div>
+                }
+              >
+                <div class="w-24 h-24 rounded-2xl bg-white border border-slate-200 p-2 shadow-xs flex items-center justify-center overflow-hidden">
+                  <img
+                    src={logoUrl()}
+                    alt="Store Logo"
+                    class="max-w-full max-h-full object-contain"
+                  />
+                </div>
               </Show>
+              <p class="text-[11px] font-medium text-slate-500 mt-2 text-center">
+                {logoUrl() ? 'Active Custom Logo' : 'Default Emblem in use'}
+              </p>
+            </div>
+
+            {/* Inputs: File Upload & URL */}
+            <div class="lg:col-span-2 space-y-4">
+              {/* Option A: Upload File */}
+              <div>
+                <label class="block font-bold text-xs text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Upload class="w-3.5 h-3.5 text-emerald-600" />
+                  Upload Image File (Auto-Optimized, Aspect Ratio Preserved)
+                </label>
+                <div class="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoFileChange}
+                    disabled={isCompressingLogo()}
+                    class="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-200 rounded-lg p-1.5"
+                  />
+                </div>
+                <Show when={isCompressingLogo()}>
+                  <p class="text-[11px] text-emerald-600 font-semibold mt-1">
+                    Optimizing image proportionally...
+                  </p>
+                </Show>
+                <Show when={logoUploadError()}>
+                  <p class="text-[11px] text-rose-600 font-medium mt-1">
+                    {logoUploadError()}
+                  </p>
+                </Show>
+              </div>
+
+              {/* Option B: Or Image URL */}
+              <div>
+                <label class="block font-bold text-xs text-slate-700 mb-1">
+                  Or Paste Logo Image URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://example.com/logo.png"
+                  value={logoUrl()}
+                  onInput={(e) => setLogoUrl(e.currentTarget.value)}
+                  class="w-full p-2.5 rounded-lg border border-slate-200 font-mono text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                />
+              </div>
             </div>
           </div>
         </div>

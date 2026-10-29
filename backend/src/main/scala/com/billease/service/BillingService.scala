@@ -2,6 +2,7 @@ package com.billease.service
 
 import cats.effect.IO
 import cats.implicits.*
+import cats.data.NonEmptyList
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
@@ -264,6 +265,66 @@ class BillingService(
       items = savedItems
     )
 
+  private def combineWhere(filters: List[Option[Fragment]]): Fragment =
+    filters.flatten match
+      case Nil => fr""
+      case head :: tail => fr"WHERE " ++ tail.foldLeft(head)((acc, f) => acc ++ fr" AND " ++ f)
+
+  def listInvoicesPaged(
+      tenantId: UUID,
+      qOpt: Option[String] = None,
+      paymentModeOpt: Option[String] = None,
+      paymentStatusOpt: Option[String] = None,
+      page: Int = 1,
+      limit: Int = 50
+  ): IO[PagedInvoices] =
+    val safePage = page.max(1)
+    val safeLimit = limit.max(1).min(500)
+    val offset = (safePage - 1) * safeLimit
+
+    val filterFragments = List(
+      Some(fr"tenant_id = $tenantId"),
+      qOpt.filter(_.trim.nonEmpty).map { q =>
+        val wildcard = s"%${q.trim}%"
+        fr"(invoice_number ILIKE $wildcard OR customer_name ILIKE $wildcard OR customer_phone ILIKE $wildcard)"
+      },
+      paymentModeOpt.filter(m => m.trim.nonEmpty && m != "ALL").map(m => fr"payment_mode = $m"),
+      paymentStatusOpt.filter(s => s.trim.nonEmpty && s != "ALL").map(s => fr"payment_status = $s")
+    )
+    val whereClause = combineWhere(filterFragments)
+
+    val countQuery = (fr"SELECT COUNT(*) FROM invoices" ++ whereClause).query[Long].unique
+
+    val rowsQuery = (fr"""
+      SELECT id, tenant_id, invoice_number, invoice_type, customer_id, customer_name,
+             customer_phone, subtotal, item_discount_total, bill_discount_percent,
+             bill_discount_amount, coupon_code, coupon_discount_amount,
+             loyalty_points_redeemed, loyalty_discount_amount, taxable_amount,
+             cgst_amount, sgst_amount, igst_amount, round_off, grand_total,
+             payment_mode, payment_status, cash_tendered, change_returned, cashier_id, cashier_name,
+             notes, created_at
+      FROM invoices
+    """ ++ whereClause ++ fr"ORDER BY created_at DESC LIMIT $safeLimit OFFSET $offset").query[InvoiceRow].to[List]
+
+    for
+      total <- countQuery.transact(xa)
+      invRows <- rowsQuery.transact(xa)
+      invoiceIds = invRows.map(_.id)
+      itemsList <- NonEmptyList.fromList(invoiceIds) match
+        case None => IO.pure(Nil)
+        case Some(nel) =>
+          (fr"""
+            SELECT id, invoice_id, tenant_id, product_id, batch_id, product_name,
+                   quantity, unit, unit_price, mrp, discount_percent, discount_amount,
+                   gst_rate, cgst_amount, sgst_amount, igst_amount, total_amount
+            FROM invoice_items
+            WHERE tenant_id = $tenantId AND """ ++ Fragments.in(fr"invoice_id", nel)
+          ).query[InvoiceItem].to[List].transact(xa)
+      itemsByInvoice = itemsList.groupBy(_.invoiceId)
+      items = invRows.map(r => r.toInvoice(itemsByInvoice.getOrElse(r.id, Nil)))
+      totalPages = if total == 0 then 1 else Math.ceil(total.toDouble / safeLimit).toInt
+    yield PagedInvoices(items, total, safePage, safeLimit, totalPages)
+
   def listRecentInvoices(tenantId: UUID, limit: Int = 100): IO[List[Invoice]] =
     for
       invRows <- sql"""
@@ -312,6 +373,53 @@ class BillingService(
       FROM invoices
       WHERE tenant_id = $tenantId
     """.query[SalesOverview].unique.transact(xa)
+
+  def getSoldItemsPaged(
+      tenantId: UUID,
+      qOpt: Option[String] = None,
+      page: Int = 1,
+      limit: Int = 50
+  ): IO[PagedSoldItems] =
+    val safePage = page.max(1)
+    val safeLimit = limit.max(1).min(500)
+    val offset = (safePage - 1) * safeLimit
+
+    val filterFragments = List(
+      Some(fr"ii.tenant_id = $tenantId"),
+      Some(fr"i.payment_status = 'COMPLETED'"),
+      qOpt.filter(_.trim.nonEmpty).map { q =>
+        val wildcard = s"%${q.trim}%"
+        fr"ii.product_name ILIKE $wildcard"
+      }
+    )
+    val whereClause = combineWhere(filterFragments)
+
+    val countQuery = (fr"""
+      SELECT COUNT(DISTINCT ii.product_name)
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+    """ ++ whereClause).query[Long].unique
+
+    val dataQuery = (fr"""
+      SELECT 
+        ii.product_name,
+        COALESCE(SUM(ii.quantity), 0) as total_quantity,
+        COALESCE(SUM(ii.total_amount), 0) as total_revenue,
+        COALESCE(AVG(ii.unit_price), 0) as avg_price,
+        COUNT(DISTINCT ii.invoice_id) as orders_count
+      FROM invoice_items ii
+      JOIN invoices i ON ii.invoice_id = i.id
+    """ ++ whereClause ++ fr"""
+      GROUP BY ii.product_name
+      ORDER BY total_revenue DESC
+      LIMIT $safeLimit OFFSET $offset
+    """).query[SoldItemStats].to[List]
+
+    for
+      total <- countQuery.transact(xa)
+      items <- dataQuery.transact(xa)
+      totalPages = if total == 0 then 1 else Math.ceil(total.toDouble / safeLimit).toInt
+    yield PagedSoldItems(items, total, safePage, safeLimit, totalPages)
 
   def getSoldItems(tenantId: UUID): IO[List[SoldItemStats]] =
     sql"""

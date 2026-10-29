@@ -57,14 +57,27 @@ export const Sidebar: Component<SidebarProps> = (props) => {
   };
 
   return (
-    <aside class="w-60 shrink-0 bg-slate-900 flex flex-col min-h-screen shadow-xl">
+    <aside class="w-60 shrink-0 bg-slate-900 flex flex-col h-full shadow-xl select-none z-20 overflow-hidden">
 
       {/* Brand */}
       <div class="px-5 py-5 border-b border-slate-800">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow">
-            <Store class="w-5 h-5 text-white" />
-          </div>
+          <Show
+            when={tenant()?.logoUrl}
+            fallback={
+              <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow shrink-0">
+                <Store class="w-5 h-5 text-white" />
+              </div>
+            }
+          >
+            <div class="w-9 h-9 rounded-xl bg-white border border-slate-700/50 p-1 flex items-center justify-center overflow-hidden shadow shrink-0">
+              <img
+                src={tenant()?.logoUrl}
+                alt="Logo"
+                class="max-w-full max-h-full object-contain"
+              />
+            </div>
+          </Show>
           <div class="min-w-0">
             <p class="text-white font-bold text-sm leading-tight truncate">
               {tenant()?.name || 'Billease'}

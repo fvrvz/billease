@@ -11,6 +11,44 @@ import java.time.Instant
 
 class KhataService(xa: Transactor[IO]):
 
+  private def combineWhere(filters: List[Option[Fragment]]): Fragment =
+    filters.flatten match
+      case Nil => fr""
+      case head :: tail => fr"WHERE " ++ tail.foldLeft(head)((acc, f) => acc ++ fr" AND " ++ f)
+
+  def listCustomersPaged(
+      tenantId: UUID,
+      qOpt: Option[String] = None,
+      withDueOnlyOpt: Option[Boolean] = None,
+      page: Int = 1,
+      limit: Int = 50
+  ): IO[PagedCustomers] =
+    val safePage = page.max(1)
+    val safeLimit = limit.max(1).min(500)
+    val offset = (safePage - 1) * safeLimit
+
+    val filterFragments = List(
+      Some(fr"tenant_id = $tenantId"),
+      qOpt.filter(_.trim.nonEmpty).map { q =>
+        val wildcard = s"%${q.trim}%"
+        fr"(name ILIKE $wildcard OR phone ILIKE $wildcard)"
+      },
+      withDueOnlyOpt.filter(identity).map(_ => fr"current_due > 0")
+    )
+    val whereClause = combineWhere(filterFragments)
+
+    val countQuery = (fr"SELECT COUNT(*) FROM customers" ++ whereClause).query[Long].unique
+    val dataQuery = (fr"""
+      SELECT id, tenant_id, name, phone, gstin, address, credit_limit, current_due, loyalty_points
+      FROM customers
+    """ ++ whereClause ++ fr"ORDER BY current_due DESC, name ASC LIMIT $safeLimit OFFSET $offset").query[Customer].to[List]
+
+    for
+      total <- countQuery.transact(xa)
+      items <- dataQuery.transact(xa)
+      totalPages = if total == 0 then 1 else Math.ceil(total.toDouble / safeLimit).toInt
+    yield PagedCustomers(items, total, safePage, safeLimit, totalPages)
+
   def listCustomers(tenantId: UUID): IO[List[Customer]] =
     sql"""
       SELECT id, tenant_id, name, phone, gstin, address, credit_limit, current_due, loyalty_points

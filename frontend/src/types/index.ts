@@ -276,3 +276,40 @@ export interface SendWhatsappBillResponse {
   whatsappUrl: string;
   message: string;
 }
+
+// Pagination & Filtering
+export interface PagedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+  forceRefresh?: boolean;
+}
+
+export interface ProductFilterParams extends PaginationParams {
+  q?: string;
+  categoryId?: string;
+  inStockOnly?: boolean;
+}
+
+export interface InvoiceFilterParams extends PaginationParams {
+  q?: string;
+  paymentMode?: string;
+  paymentStatus?: string;
+}
+
+export interface CustomerFilterParams extends PaginationParams {
+  q?: string;
+  withDueOnly?: boolean;
+}
+
+export interface SoldItemFilterParams extends PaginationParams {
+  q?: string;
+}
+
