@@ -33,12 +33,12 @@ const AuthenticatedApp: Component = () => {
   };
 
   return (
-    <div class="flex min-h-screen bg-slate-100">
+    <div class="flex h-screen w-screen overflow-hidden bg-slate-100">
       {/* Sidebar Navigation */}
       <Sidebar activeTab={activeTab()} setActiveTab={setActiveTab} />
 
       {/* Main Content Area */}
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
 
         {/* Page Body */}
         <main class="flex-1 overflow-y-auto p-4 lg:p-6">

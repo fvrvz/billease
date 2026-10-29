@@ -12,10 +12,10 @@ import scala.util.Try
 
 class PdfService:
 
-  private val primaryColor   = new Color(37, 99, 235)   // Blue #2563EB
+  private val primaryColor   = new Color(15, 23, 42)    // Slate-900 #0F172A
   private val textDark       = new Color(15, 23, 42)    // Slate #0F172A
   private val textMuted      = new Color(100, 116, 139) // Slate-500 #64748B
-  private val tableHeaderBg  = new Color(241, 245, 249) // Slate-100 #F1F5F9
+  private val tableHeaderBg  = new Color(15, 23, 42)    // Slate-900 #0F172A
   private val alternateRowBg = new Color(248, 250, 252) // Slate-50 #F8FAFC
   private val borderCol      = new Color(226, 232, 240) // Slate-200 #E2E8F0
   private val successGreen   = new Color(22, 101, 52)   // Green #166534
@@ -29,15 +29,15 @@ class PdfService:
     PdfWriter.getInstance(doc, out)
     doc.open()
 
-    val fontStoreTitle = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, primaryColor)
+    val fontStoreTitle = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, textDark)
     val fontDocTitle   = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, textDark)
     val fontMetaLabel  = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, textDark)
     val fontMetaVal    = FontFactory.getFont(FontFactory.HELVETICA, 9, textDark)
     val fontSmall      = FontFactory.getFont(FontFactory.HELVETICA, 8, textMuted)
-    val fontTableHead  = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, textDark)
+    val fontTableHead  = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, Color.WHITE)
     val fontTableBody  = FontFactory.getFont(FontFactory.HELVETICA, 9, textDark)
     val fontTotalLabel = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, textDark)
-    val fontGrandTotal = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, primaryColor)
+    val fontGrandTotal = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, Color.WHITE)
     val fontSuccess    = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, successGreen)
 
     // 1. Header Table (Store Details Left, Invoice Metadata Right)

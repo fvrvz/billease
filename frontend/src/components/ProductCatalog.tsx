@@ -10,6 +10,10 @@ export const ProductCatalog: Component = () => {
   const [products, setProducts] = createSignal<Product[]>([]);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [showAddModal, setShowAddModal] = createSignal(false);
+  const [page, setPage] = createSignal(1);
+  const [pageSize, setPageSize] = createSignal(15);
+  const [totalItems, setTotalItems] = createSignal(0);
+  const [totalPages, setTotalPages] = createSignal(1);
 
   // New product form
   const [name, setName] = createSignal('');
@@ -27,21 +31,25 @@ export const ProductCatalog: Component = () => {
   const loadProducts = async () => {
     const t = tenant();
     if (!t) return;
-    const list = await apiClient.listProducts(t.id);
-    setProducts(list);
+    const res = await apiClient.listProducts(t.id, {
+      q: searchQuery().trim() || undefined,
+      page: page(),
+      limit: pageSize()
+    });
+    setProducts(res.items);
+    setTotalItems(res.total);
+    setTotalPages(res.totalPages);
   };
 
   onMount(() => loadProducts());
 
-  const filteredProducts = () => {
-    const q = searchQuery().toLowerCase().trim();
-    if (!q) return products();
-    return products().filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.barcode && p.barcode.includes(q)) ||
-      (p.sku && p.sku.toLowerCase().includes(q))
-    );
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    setPage(1);
+    loadProducts();
   };
+
+  const filteredProducts = () => products();
 
   const handleCreateProduct = async (e: Event) => {
     e.preventDefault();
@@ -114,7 +122,7 @@ export const ProductCatalog: Component = () => {
               type="text"
               placeholder="Search products..."
               value={searchQuery()}
-              onInput={(e) => setSearchQuery(e.currentTarget.value)}
+              onInput={(e) => handleSearchInput(e.currentTarget.value)}
               class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -200,6 +208,47 @@ export const ProductCatalog: Component = () => {
               </For>
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <div>
+            Showing <span class="font-bold text-slate-700">{products().length === 0 ? 0 : (page() - 1) * pageSize() + 1}</span> to <span class="font-bold text-slate-700">{Math.min(page() * pageSize(), totalItems())}</span> of <span class="font-bold text-slate-700">{totalItems()}</span> items
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5 text-xs text-slate-500">
+              <span>Rows:</span>
+              <select
+                value={pageSize()}
+                onChange={(e) => {
+                  setPageSize(Number(e.currentTarget.value));
+                  setPage(1);
+                  loadProducts();
+                }}
+                class="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-700"
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+            <button
+              onClick={() => { if (page() > 1) { setPage(page() - 1); loadProducts(); } }}
+              disabled={page() <= 1}
+              class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+            >
+              Previous
+            </button>
+            <span class="font-medium text-slate-600">Page {page()} of {totalPages()}</span>
+            <button
+              onClick={() => { if (page() < totalPages()) { setPage(page() + 1); loadProducts(); } }}
+              disabled={page() >= totalPages()}
+              class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 

@@ -47,12 +47,12 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
   const loadData = async () => {
     const t = tenant();
     if (!t) return;
-    const [pList, cList] = await Promise.all([
-      apiClient.listProducts(t.id),
-      apiClient.listCustomers(t.id, token())
+    const [pRes, cRes] = await Promise.all([
+      apiClient.listProducts(t.id, { limit: 500 }),
+      apiClient.listCustomers(t.id, token(), { limit: 500 })
     ]);
-    setProducts(pList);
-    setCustomers(cList);
+    setProducts(pRes.items);
+    setCustomers(cRes.items);
   };
 
   const openPaymentConfirmation = (mode: PaymentMode) => {

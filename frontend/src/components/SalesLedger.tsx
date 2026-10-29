@@ -46,19 +46,43 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
   const [paymentFilter, setPaymentFilter] = createSignal('ALL');
   const [statusFilter, setStatusFilter] = createSignal<'ALL' | 'COMPLETED' | 'PENDING'>('ALL');
 
+  const [invoicePage, setInvoicePage] = createSignal(1);
+  const [invoicePageSize, setInvoicePageSize] = createSignal(15);
+  const [invoiceTotal, setInvoiceTotal] = createSignal(0);
+  const [invoiceTotalPages, setInvoiceTotalPages] = createSignal(1);
+
+  const [soldPage, setSoldPage] = createSignal(1);
+  const [soldPageSize, setSoldPageSize] = createSignal(15);
+  const [soldTotal, setSoldTotal] = createSignal(0);
+  const [soldTotalPages, setSoldTotalPages] = createSignal(1);
+
   const loadData = async () => {
     const t = tenant();
     if (!t) return;
     setLoading(true);
     try {
-      const [invList, ovData, soldData] = await Promise.all([
-        apiClient.listInvoices(t.id, token()),
+      const [invRes, ovData, soldRes] = await Promise.all([
+        apiClient.listInvoices(t.id, token(), {
+          q: searchQuery().trim() || undefined,
+          paymentMode: paymentFilter() !== 'ALL' ? paymentFilter() : undefined,
+          paymentStatus: statusFilter() !== 'ALL' ? statusFilter() : undefined,
+          page: invoicePage(),
+          limit: invoicePageSize()
+        }),
         apiClient.getSalesOverview(t.id, token()),
-        apiClient.getSoldItems(t.id, token())
+        apiClient.getSoldItems(t.id, token(), {
+          q: searchQuery().trim() || undefined,
+          page: soldPage(),
+          limit: soldPageSize()
+        })
       ]);
-      setInvoices(invList);
+      setInvoices(invRes.items);
+      setInvoiceTotal(invRes.total);
+      setInvoiceTotalPages(invRes.totalPages);
       setOverview(ovData);
-      setSoldItems(soldData);
+      setSoldItems(soldRes.items);
+      setSoldTotal(soldRes.total);
+      setSoldTotalPages(soldRes.totalPages);
     } finally {
       setLoading(false);
     }
@@ -79,33 +103,27 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
     loadData();
   });
 
-  const filteredInvoices = () => {
-    let list = invoices();
-    const q = searchQuery().trim().toLowerCase();
-    if (q) {
-      list = list.filter(i =>
-        i.invoiceNumber.toLowerCase().includes(q) ||
-        (i.customerName && i.customerName.toLowerCase().includes(q)) ||
-        (i.customerPhone && i.customerPhone.includes(q))
-      );
-    }
-    if (paymentFilter() !== 'ALL') {
-      list = list.filter(i => i.paymentMode === paymentFilter());
-    }
-    if (statusFilter() !== 'ALL') {
-      list = list.filter(i => (i.paymentStatus || 'COMPLETED') === statusFilter());
-    }
-    return list;
+  const handleSearchInput = (value: string) => {
+    setSearchQuery(value);
+    setInvoicePage(1);
+    setSoldPage(1);
+    loadData();
   };
 
-  const filteredSoldItems = () => {
-    let list = soldItems();
-    const q = searchQuery().trim().toLowerCase();
-    if (q) {
-      list = list.filter(it => it.productName.toLowerCase().includes(q));
-    }
-    return list;
+  const handlePaymentFilterChange = (value: string) => {
+    setPaymentFilter(value);
+    setInvoicePage(1);
+    loadData();
   };
+
+  const handleStatusFilterChange = (value: 'ALL' | 'COMPLETED' | 'PENDING') => {
+    setStatusFilter(value);
+    setInvoicePage(1);
+    loadData();
+  };
+
+  const filteredInvoices = () => invoices();
+  const filteredSoldItems = () => soldItems();
 
   const handleDownloadPdf = (inv: Invoice) => {
     const t = tenant();
@@ -304,7 +322,7 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                 type="text"
                 placeholder={activeTab() === 'bills' ? 'Search by bill no, buyer, phone...' : 'Search sold product name...'}
                 value={searchQuery()}
-                onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                onInput={(e) => handleSearchInput(e.currentTarget.value)}
                 class="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
             </div>
@@ -312,7 +330,7 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
             <Show when={activeTab() === 'bills'}>
               <select
                 value={statusFilter()}
-                onChange={(e) => setStatusFilter(e.currentTarget.value as 'ALL' | 'COMPLETED' | 'PENDING')}
+                onChange={(e) => handleStatusFilterChange(e.currentTarget.value as 'ALL' | 'COMPLETED' | 'PENDING')}
                 class="bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               >
                 <option value="ALL">All Status</option>
@@ -322,7 +340,7 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
 
               <select
                 value={paymentFilter()}
-                onChange={(e) => setPaymentFilter(e.currentTarget.value)}
+                onChange={(e) => handlePaymentFilterChange(e.currentTarget.value)}
                 class="bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               >
                 <option value="ALL">All Modes</option>
@@ -472,6 +490,47 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
               </tbody>
             </table>
           </div>
+
+          {/* Invoices Pagination Bar */}
+          <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+            <div>
+              Showing <span class="font-bold text-slate-700">{invoices().length === 0 ? 0 : (invoicePage() - 1) * invoicePageSize() + 1}</span> to <span class="font-bold text-slate-700">{Math.min(invoicePage() * invoicePageSize(), invoiceTotal())}</span> of <span class="font-bold text-slate-700">{invoiceTotal()}</span> bills
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Rows:</span>
+                <select
+                  value={invoicePageSize()}
+                  onChange={(e) => {
+                    setInvoicePageSize(Number(e.currentTarget.value));
+                    setInvoicePage(1);
+                    loadData();
+                  }}
+                  class="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-700"
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <button
+                onClick={() => { if (invoicePage() > 1) { setInvoicePage(invoicePage() - 1); loadData(); } }}
+                disabled={invoicePage() <= 1}
+                class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              >
+                Previous
+              </button>
+              <span class="font-medium text-slate-600">Page {invoicePage()} of {invoiceTotalPages()}</span>
+              <button
+                onClick={() => { if (invoicePage() < invoiceTotalPages()) { setInvoicePage(invoicePage() + 1); loadData(); } }}
+                disabled={invoicePage() >= invoiceTotalPages()}
+                class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </Show>
 
         {/* Content View 2: All Sold Items Analytics */}
@@ -538,6 +597,47 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                 </For>
               </tbody>
             </table>
+          </div>
+
+          {/* Sold Items Pagination Bar */}
+          <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+            <div>
+              Showing <span class="font-bold text-slate-700">{soldItems().length === 0 ? 0 : (soldPage() - 1) * soldPageSize() + 1}</span> to <span class="font-bold text-slate-700">{Math.min(soldPage() * soldPageSize(), soldTotal())}</span> of <span class="font-bold text-slate-700">{soldTotal()}</span> items
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Rows:</span>
+                <select
+                  value={soldPageSize()}
+                  onChange={(e) => {
+                    setSoldPageSize(Number(e.currentTarget.value));
+                    setSoldPage(1);
+                    loadData();
+                  }}
+                  class="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-700"
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <button
+                onClick={() => { if (soldPage() > 1) { setSoldPage(soldPage() - 1); loadData(); } }}
+                disabled={soldPage() <= 1}
+                class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              >
+                Previous
+              </button>
+              <span class="font-medium text-slate-600">Page {soldPage()} of {soldTotalPages()}</span>
+              <button
+                onClick={() => { if (soldPage() < soldTotalPages()) { setSoldPage(soldPage() + 1); loadData(); } }}
+                disabled={soldPage() >= soldTotalPages()}
+                class="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </Show>
 
