@@ -1,36 +1,47 @@
-import { Component, createSignal, onMount, Show } from 'solid-js';
-import { useAuth } from '../context/AuthContext';
-import { Settings, QrCode, Printer, Check, Upload, Image as ImageIcon, Trash2, Store } from 'lucide-solid';
-import { compressStoreLogo } from '../utils/imageCompressor';
+import { Component, createSignal, onMount, Show } from "solid-js";
+import { useAuth } from "../context/AuthContext";
+import {
+  Settings,
+  QrCode,
+  Printer,
+  Check,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  Store,
+} from "lucide-solid";
+import { compressStoreLogo } from "../utils/imageCompressor";
 
 export const StoreSettings: Component = () => {
   const { tenant, updateTenantData } = useAuth();
 
-  const [name, setName] = createSignal('');
-  const [legalName, setLegalName] = createSignal('');
-  const [phone, setPhone] = createSignal('');
-  const [email, setEmail] = createSignal('');
-  const [address, setAddress] = createSignal('');
-  const [city, setCity] = createSignal('');
-  
+  const [name, setName] = createSignal("");
+  const [legalName, setLegalName] = createSignal("");
+  const [phone, setPhone] = createSignal("");
+  const [email, setEmail] = createSignal("");
+  const [address, setAddress] = createSignal("");
+  const [city, setCity] = createSignal("");
+
   // GST 1-question configuration
   const [hasGst, setHasGst] = createSignal(false);
-  const [gstin, setGstin] = createSignal('');
-  const [stateCode, setStateCode] = createSignal('27');
+  const [gstin, setGstin] = createSignal("");
+  const [stateCode, setStateCode] = createSignal("27");
 
   // Branding (Logo only, banner removed)
-  const [logoUrl, setLogoUrl] = createSignal('');
+  const [logoUrl, setLogoUrl] = createSignal("");
   const [isCompressingLogo, setIsCompressingLogo] = createSignal(false);
-  const [logoUploadError, setLogoUploadError] = createSignal('');
+  const [logoUploadError, setLogoUploadError] = createSignal("");
 
   // Receipt & Print
-  const [invoicePrefix, setInvoicePrefix] = createSignal('INV');
-  const [invoiceFooter, setInvoiceFooter] = createSignal('Thank you for shopping with us! Visit again.');
+  const [invoicePrefix, setInvoicePrefix] = createSignal("INV");
+  const [invoiceFooter, setInvoiceFooter] = createSignal(
+    "Thank you for shopping with us! Visit again.",
+  );
   const [thermalWidthMm, setThermalWidthMm] = createSignal(80);
 
   // Dynamic UPI
-  const [upiVpa, setUpiVpa] = createSignal('');
-  const [upiPayeeName, setUpiPayeeName] = createSignal('');
+  const [upiVpa, setUpiVpa] = createSignal("");
+  const [upiPayeeName, setUpiPayeeName] = createSignal("");
 
   const [isSaving, setIsSaving] = createSignal(false);
   const [showSavedPill, setShowSavedPill] = createSignal(false);
@@ -39,37 +50,38 @@ export const StoreSettings: Component = () => {
     const t = tenant();
     if (!t) return;
     setName(t.name);
-    setLegalName(t.legalName || '');
+    setLegalName(t.legalName || "");
     setPhone(t.phone);
-    setEmail(t.email || '');
-    setAddress(t.address || '');
-    setCity(t.city || '');
+    setEmail(t.email || "");
+    setAddress(t.address || "");
+    setCity(t.city || "");
     setHasGst(t.hasGst);
-    setGstin(t.gstin || '');
-    setStateCode(t.stateCode || '27');
-    setLogoUrl(t.logoUrl || '');
+    setGstin(t.gstin || "");
+    setStateCode(t.stateCode || "27");
+    setLogoUrl(t.logoUrl || "");
     setInvoicePrefix(t.invoicePrefix);
     setInvoiceFooter(t.invoiceFooter);
     setThermalWidthMm(t.thermalWidthMm);
-    setUpiVpa(t.upiVpa || '');
-    setUpiPayeeName(t.upiPayeeName || '');
+    setUpiVpa(t.upiVpa || "");
+    setUpiPayeeName(t.upiPayeeName || "");
   });
 
   const handleLogoFileChange = async (e: Event) => {
     const input = e.target as HTMLInputElement;
     if (!input.files || input.files.length === 0) return;
     const file = input.files[0];
-    setLogoUploadError('');
+    setLogoUploadError("");
     setIsCompressingLogo(true);
     try {
       const compressedDataUrl = await compressStoreLogo(file, 320, 0.88);
       setLogoUrl(compressedDataUrl);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to compress image';
+      const msg =
+        err instanceof Error ? err.message : "Failed to compress image";
       setLogoUploadError(msg);
     } finally {
       setIsCompressingLogo(false);
-      input.value = '';
+      input.value = "";
     }
   };
 
@@ -98,7 +110,7 @@ export const StoreSettings: Component = () => {
       invoiceFooter: invoiceFooter().trim(),
       thermalWidthMm: thermalWidthMm(),
       upiVpa: upiVpa().trim() || undefined,
-      upiPayeeName: upiPayeeName().trim() || name().trim()
+      upiPayeeName: upiPayeeName().trim() || name().trim(),
     });
 
     setIsSaving(false);
@@ -108,7 +120,6 @@ export const StoreSettings: Component = () => {
 
   return (
     <div class="max-w-4xl mx-auto space-y-6">
-      
       {/* Header */}
       <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
         <div>
@@ -117,7 +128,8 @@ export const StoreSettings: Component = () => {
             Store Profile & Branding Settings
           </h2>
           <p class="text-xs text-slate-500">
-            Configure store banner, logo, receipt printing, GST, and UPI QR code.
+            Configure store banner, logo, receipt printing, GST, and UPI QR
+            code.
           </p>
         </div>
 
@@ -129,7 +141,6 @@ export const StoreSettings: Component = () => {
       </div>
 
       <form onSubmit={handleSave} class="space-y-6 text-xs">
-
         {/* 1. Basic Store Details */}
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
           <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">
@@ -138,7 +149,9 @@ export const StoreSettings: Component = () => {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Store Display Name *</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Store Display Name *
+              </label>
               <input
                 type="text"
                 required
@@ -148,7 +161,9 @@ export const StoreSettings: Component = () => {
               />
             </div>
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Legal Business / Enterprise Name</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Legal Business / Enterprise Name
+              </label>
               <input
                 type="text"
                 value={legalName()}
@@ -160,7 +175,9 @@ export const StoreSettings: Component = () => {
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Store Phone *</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Store Phone *
+              </label>
               <input
                 type="text"
                 required
@@ -170,7 +187,9 @@ export const StoreSettings: Component = () => {
               />
             </div>
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Store Email</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Store Email
+              </label>
               <input
                 type="email"
                 value={email()}
@@ -179,7 +198,9 @@ export const StoreSettings: Component = () => {
               />
             </div>
             <div>
-              <label class="block font-bold text-slate-700 mb-1">City / Town</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                City / Town
+              </label>
               <input
                 type="text"
                 value={city()}
@@ -190,7 +211,9 @@ export const StoreSettings: Component = () => {
           </div>
 
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Full Shop Address</label>
+            <label class="block font-bold text-slate-700 mb-1">
+              Full Shop Address
+            </label>
             <textarea
               rows="2"
               value={address()}
@@ -208,7 +231,8 @@ export const StoreSettings: Component = () => {
                 GST Configuration
               </h3>
               <p class="text-[11px] text-slate-500">
-                Small shops without GST can turn this off to print simple cash memos.
+                Small shops without GST can turn this off to print simple cash
+                memos.
               </p>
             </div>
 
@@ -218,7 +242,9 @@ export const StoreSettings: Component = () => {
                 type="button"
                 onClick={() => setHasGst(false)}
                 class={`px-3 py-1 rounded text-xs font-bold transition-colors ${
-                  !hasGst() ? 'bg-white shadow-xs text-slate-800' : 'text-slate-500'
+                  !hasGst()
+                    ? "bg-white shadow-xs text-slate-800"
+                    : "text-slate-500"
                 }`}
               >
                 No GST
@@ -227,7 +253,9 @@ export const StoreSettings: Component = () => {
                 type="button"
                 onClick={() => setHasGst(true)}
                 class={`px-3 py-1 rounded text-xs font-bold transition-colors ${
-                  hasGst() ? 'bg-emerald-600 shadow-xs text-white' : 'text-slate-500'
+                  hasGst()
+                    ? "bg-emerald-600 shadow-xs text-white"
+                    : "text-slate-500"
                 }`}
               >
                 Yes, have GST
@@ -238,7 +266,9 @@ export const StoreSettings: Component = () => {
           <Show when={hasGst()}>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               <div>
-                <label class="block font-bold text-slate-700 mb-1">15-Digit GSTIN *</label>
+                <label class="block font-bold text-slate-700 mb-1">
+                  15-Digit GSTIN *
+                </label>
                 <input
                   type="text"
                   placeholder="e.g. 27ABCDE1234F1Z5"
@@ -248,11 +278,17 @@ export const StoreSettings: Component = () => {
                 />
               </div>
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Detected Home State Code</label>
+                <label class="block font-bold text-slate-700 mb-1">
+                  Detected Home State Code
+                </label>
                 <input
                   type="text"
                   readonly
-                  value={gstin().length >= 2 ? `${gstin().substring(0, 2)} (Auto-detected)` : stateCode()}
+                  value={
+                    gstin().length >= 2
+                      ? `${gstin().substring(0, 2)} (Auto-detected)`
+                      : stateCode()
+                  }
                   class="w-full p-2.5 rounded-lg border border-slate-100 bg-slate-50 font-mono text-slate-600 text-xs"
                 />
               </div>
@@ -269,14 +305,15 @@ export const StoreSettings: Component = () => {
                 Store Brand Logo
               </h3>
               <p class="text-[11px] text-slate-500 mt-0.5">
-                Upload your store logo or paste an image URL. If not provided, a default store emblem is used.
+                Upload your store logo or paste an image URL. If not provided, a
+                default store emblem is used.
               </p>
             </div>
 
             <Show when={logoUrl()}>
               <button
                 type="button"
-                onClick={() => setLogoUrl('')}
+                onClick={() => setLogoUrl("")}
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
                 title="Remove custom logo and revert to default"
               >
@@ -294,7 +331,9 @@ export const StoreSettings: Component = () => {
                 fallback={
                   <div class="w-24 h-24 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center shadow-md">
                     <Store class="w-10 h-10 text-emerald-400" />
-                    <span class="text-[9px] font-bold text-slate-300 mt-1 uppercase tracking-wider">Default</span>
+                    <span class="text-[9px] font-bold text-slate-300 mt-1 uppercase tracking-wider">
+                      Default
+                    </span>
                   </div>
                 }
               >
@@ -307,7 +346,7 @@ export const StoreSettings: Component = () => {
                 </div>
               </Show>
               <p class="text-[11px] font-medium text-slate-500 mt-2 text-center">
-                {logoUrl() ? 'Active Custom Logo' : 'Default Emblem in use'}
+                {logoUrl() ? "Active Custom Logo" : "Default Emblem in use"}
               </p>
             </div>
 
@@ -365,13 +404,16 @@ export const StoreSettings: Component = () => {
               Dynamic UPI Scan & Pay Settings
             </h3>
             <p class="text-[11px] text-slate-500">
-              Generates an instant QR code on the POS screen and printed receipt for customer payment.
+              Generates an instant QR code on the POS screen and printed receipt
+              for customer payment.
             </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Store UPI VPA / ID *</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Store UPI VPA / ID *
+              </label>
               <input
                 type="text"
                 placeholder="e.g. shreeganesh@upi or 9876543210@paytm"
@@ -381,7 +423,9 @@ export const StoreSettings: Component = () => {
               />
             </div>
             <div>
-              <label class="block font-bold text-slate-700 mb-1">UPI Payee Display Name</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                UPI Payee Display Name
+              </label>
               <input
                 type="text"
                 placeholder="e.g. Shree Ganesh Supermarket"
@@ -401,16 +445,21 @@ export const StoreSettings: Component = () => {
               Thermal Receipt Printing
             </h3>
             <p class="text-[11px] text-slate-500">
-              Formats receipts for TVS, NGX, Everycom, Pegasus, and standard thermal POS roll printers.
+              Formats receipts for TVS, NGX, Everycom, Pegasus, and standard
+              thermal POS roll printers.
             </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Paper Roll Width</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Paper Roll Width
+              </label>
               <select
                 value={thermalWidthMm()}
-                onChange={(e) => setThermalWidthMm(Number(e.currentTarget.value))}
+                onChange={(e) =>
+                  setThermalWidthMm(Number(e.currentTarget.value))
+                }
                 class="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
               >
                 <option value={80}>3-inch Roll (80mm) - Standard</option>
@@ -419,17 +468,23 @@ export const StoreSettings: Component = () => {
             </div>
 
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Invoice Number Prefix</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Invoice Number Prefix
+              </label>
               <input
                 type="text"
                 value={invoicePrefix()}
-                onInput={(e) => setInvoicePrefix(e.currentTarget.value.toUpperCase())}
+                onInput={(e) =>
+                  setInvoicePrefix(e.currentTarget.value.toUpperCase())
+                }
                 class="w-full p-2.5 rounded-lg border border-slate-200 font-mono uppercase text-xs"
               />
             </div>
 
             <div>
-              <label class="block font-bold text-slate-700 mb-1">Footer Greeting Note</label>
+              <label class="block font-bold text-slate-700 mb-1">
+                Footer Greeting Note
+              </label>
               <input
                 type="text"
                 value={invoiceFooter()}
@@ -447,12 +502,10 @@ export const StoreSettings: Component = () => {
             disabled={isSaving()}
             class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-colors shadow-xs"
           >
-            {isSaving() ? 'Saving Changes...' : 'Save All Settings'}
+            {isSaving() ? "Saving Changes..." : "Save All Settings"}
           </button>
         </div>
-
       </form>
     </div>
   );
 };
-

@@ -1,17 +1,18 @@
-import { Component, createSignal, Show } from 'solid-js';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { LoginPage } from './components/LoginPage';
-import { Sidebar } from './components/Sidebar';
-import { POSRegister } from './components/POSRegister';
-import { SalesLedger } from './components/SalesLedger';
-import { ProductCatalog } from './components/ProductCatalog';
-import { CustomerKhata } from './components/CustomerKhata';
-import { CouponLoyalty } from './components/CouponLoyalty';
-import { StoreSettings } from './components/StoreSettings';
-import { SuperAdminDashboard } from './components/SuperAdminDashboard';
-import { ThermalReceiptModal } from './components/ThermalReceiptModal';
-import { UpiQrModal } from './components/UpiQrModal';
-import { Invoice } from './types';
+import { Component, createSignal, createEffect, Show } from "solid-js";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LoginPage } from "./components/LoginPage";
+import { Sidebar } from "./components/Sidebar";
+import { POSRegister } from "./components/POSRegister";
+import { SalesLedger } from "./components/SalesLedger";
+import { ProductCatalog } from "./components/ProductCatalog";
+import { CustomerKhata } from "./components/CustomerKhata";
+import { CouponLoyalty } from "./components/CouponLoyalty";
+import { StoreSettings } from "./components/StoreSettings";
+import { SuperAdminDashboard } from "./components/SuperAdminDashboard";
+import { CashierManagement } from "./components/CashierManagement";
+import { ThermalReceiptModal } from "./components/ThermalReceiptModal";
+import { UpiQrModal } from "./components/UpiQrModal";
+import { Invoice } from "./types";
 
 const AppShell: Component = () => {
   const { isAuthenticated } = useAuth();
@@ -24,9 +25,20 @@ const AppShell: Component = () => {
 };
 
 const AuthenticatedApp: Component = () => {
-  const [activeTab, setActiveTab] = createSignal('pos');
+  const { isSuperAdmin } = useAuth();
+  // Super admin lands on their own screen; everyone else starts at POS
+  const [activeTab, setActiveTab] = createSignal(isSuperAdmin() ? "superadmin" : "pos");
+
+  createEffect(() => {
+    if (isSuperAdmin() && activeTab() !== "superadmin") {
+      setActiveTab("superadmin");
+    }
+  });
   const [activeInvoice, setActiveInvoice] = createSignal<Invoice | null>(null);
-  const [upiData, setUpiData] = createSignal<{ amount: number; upiUri: string } | null>(null);
+  const [upiData, setUpiData] = createSignal<{
+    amount: number;
+    upiUri: string;
+  } | null>(null);
 
   const openUpiModal = (amount: number, upiUri: string) => {
     setUpiData({ amount, upiUri });
@@ -39,39 +51,40 @@ const AuthenticatedApp: Component = () => {
 
       {/* Main Content Area */}
       <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-
         {/* Page Body */}
         <main class="flex-1 overflow-y-auto p-4 lg:p-6">
-          <Show when={activeTab() === 'pos'}>
+          <Show when={activeTab() === "pos"}>
             <POSRegister
               onBillGenerated={(inv) => setActiveInvoice(inv)}
               openUpiModal={openUpiModal}
             />
           </Show>
 
-          <Show when={activeTab() === 'sales'}>
-            <SalesLedger
-              onSelectInvoice={(inv) => setActiveInvoice(inv)}
-            />
+          <Show when={activeTab() === "sales"}>
+            <SalesLedger onSelectInvoice={(inv) => setActiveInvoice(inv)} />
           </Show>
 
-          <Show when={activeTab() === 'products'}>
+          <Show when={activeTab() === "products"}>
             <ProductCatalog />
           </Show>
 
-          <Show when={activeTab() === 'khata'}>
+          <Show when={activeTab() === "khata"}>
             <CustomerKhata />
           </Show>
 
-          <Show when={activeTab() === 'coupons'}>
+          <Show when={activeTab() === "coupons"}>
             <CouponLoyalty />
           </Show>
 
-          <Show when={activeTab() === 'settings'}>
+          <Show when={activeTab() === "settings"}>
             <StoreSettings />
           </Show>
 
-          <Show when={activeTab() === 'superadmin'}>
+          <Show when={activeTab() === "cashiers"}>
+            <CashierManagement />
+          </Show>
+
+          <Show when={activeTab() === "superadmin"}>
             <SuperAdminDashboard />
           </Show>
         </main>

@@ -103,6 +103,29 @@ case class Tenant(
     isActive: Boolean
 ) derives Codec.AsObject
 
+case class TenantCreate(
+    slug: String,
+    name: String,
+    legalName: Option[String] = None,
+    phone: String,
+    email: Option[String] = None,
+    address: Option[String] = None,
+    city: Option[String] = None,
+    stateCode: String = "27",
+    hasGst: Boolean = false,
+    gstin: Option[String] = None,
+    isCompositionScheme: Boolean = false,
+    logoUrl: Option[String] = None,
+    bannerUrl: Option[String] = None,
+    invoicePrefix: String = "INV",
+    invoiceFooter: String = "Thank you for shopping with us! Visit again.",
+    thermalWidthMm: Int = 80,
+    upiVpa: Option[String] = None,
+    upiPayeeName: Option[String] = None,
+    loyaltyPointsPer100: BigDecimal = BigDecimal(1),
+    loyaltyPointValueRs: BigDecimal = BigDecimal(1)
+) derives Codec.AsObject
+
 case class TenantUpdate(
     name: Option[String] = None,
     legalName: Option[String] = None,
@@ -122,7 +145,8 @@ case class TenantUpdate(
     upiVpa: Option[String] = None,
     upiPayeeName: Option[String] = None,
     loyaltyPointsPer100: Option[BigDecimal] = None,
-    loyaltyPointValueRs: Option[BigDecimal] = None
+    loyaltyPointValueRs: Option[BigDecimal] = None,
+    isActive: Option[Boolean] = None
 ) derives Codec.AsObject
 
 // User

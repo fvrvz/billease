@@ -41,6 +41,39 @@ export interface User {
   isActive: boolean;
 }
 
+export interface UserCreateInput {
+  tenantId?: string;
+  username: string;
+  password: string;
+  fullName: string;
+  email?: string;
+  phone?: string;
+  role: Role;
+}
+
+export interface TenantCreateInput {
+  slug: string;
+  name: string;
+  legalName?: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  stateCode?: string;
+  hasGst?: boolean;
+  gstin?: string;
+  isCompositionScheme?: boolean;
+  logoUrl?: string;
+  bannerUrl?: string;
+  invoicePrefix?: string;
+  invoiceFooter?: string;
+  thermalWidthMm?: number;
+  upiVpa?: string;
+  upiPayeeName?: string;
+  loyaltyPointsPer100?: number;
+  loyaltyPointValueRs?: number;
+}
+
 export interface Product {
   id: string;
   tenantId: string;
