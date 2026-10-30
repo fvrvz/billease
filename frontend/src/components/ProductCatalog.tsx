@@ -2,12 +2,14 @@ import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Product } from '../types';
 import { apiClient } from '../api/client';
-import { Package, Plus, Search, AlertTriangle, Barcode, Check } from 'lucide-solid';
+import { Package, Plus, Search, AlertTriangle, Barcode, Check, Loader2 } from 'lucide-solid';
+import { TableSkeleton } from './LoadingSkeleton';
 
 export const ProductCatalog: Component = () => {
   const { tenant, token, isCashier } = useAuth();
 
   const [products, setProducts] = createSignal<Product[]>([]);
+  const [loading, setLoading] = createSignal(true);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [showAddModal, setShowAddModal] = createSignal(false);
   const [page, setPage] = createSignal(1);
@@ -31,14 +33,19 @@ export const ProductCatalog: Component = () => {
   const loadProducts = async () => {
     const t = tenant();
     if (!t) return;
-    const res = await apiClient.listProducts(t.id, {
-      q: searchQuery().trim() || undefined,
-      page: page(),
-      limit: pageSize()
-    });
-    setProducts(res.items);
-    setTotalItems(res.total);
-    setTotalPages(res.totalPages);
+    setLoading(true);
+    try {
+      const res = await apiClient.listProducts(t.id, {
+        q: searchQuery().trim() || undefined,
+        page: page(),
+        limit: pageSize()
+      });
+      setProducts(res.items);
+      setTotalItems(res.total);
+      setTotalPages(res.totalPages);
+    } finally {
+      setLoading(false);
+    }
   };
 
   onMount(() => loadProducts());
@@ -123,8 +130,11 @@ export const ProductCatalog: Component = () => {
               placeholder="Search products..."
               value={searchQuery()}
               onInput={(e) => handleSearchInput(e.currentTarget.value)}
-              class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
+              class="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
             />
+            <Show when={loading()}>
+              <Loader2 class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 animate-spin" />
+            </Show>
           </div>
 
           <Show when={!isCashier()}>
@@ -155,57 +165,63 @@ export const ProductCatalog: Component = () => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <Show when={filteredProducts().length === 0}>
-                <tr>
-                  <td colspan="7" class="p-8 text-center text-slate-400">
-                    No products found. Add your first item using the button above.
-                  </td>
-                </tr>
-              </Show>
-
-              <For each={filteredProducts()}>
-                {(prod) => {
-                  const isLow = prod.currentStock <= prod.minStockAlert;
-                  return (
-                    <tr class="hover:bg-slate-50 transition-colors">
-                      <td class="p-3 font-bold text-slate-900">
-                        {prod.name}
-                        <Show when={prod.unit}>
-                          <span class="ml-1 text-[10px] text-slate-400 font-normal">({prod.unit})</span>
-                        </Show>
-                      </td>
-                      <td class="p-3 font-mono text-slate-600">
-                        {prod.barcode || '-'}
-                      </td>
-                      <td class="p-3">
-                        <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800">
-                          {prod.gstRate}%
-                        </span>
-                      </td>
-                      <td class="p-3 text-slate-500 font-medium">
-                        ₹{prod.mrp.toFixed(2)}
-                      </td>
-                      <td class="p-3 font-bold text-emerald-700">
-                        ₹{prod.sellingPrice.toFixed(2)}
-                      </td>
-                      <td class="p-3 font-bold text-slate-800">
-                        {prod.currentStock} {prod.unit}
-                      </td>
-                      <td class="p-3">
-                        <Show when={isLow} fallback={
-                          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            <Check class="w-3 h-3" /> In Stock
-                          </span>
-                        }>
-                          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                            <AlertTriangle class="w-3 h-3" /> Low Stock
-                          </span>
-                        </Show>
+              <Show when={loading()} fallback={
+                <>
+                  <Show when={filteredProducts().length === 0}>
+                    <tr>
+                      <td colspan="7" class="p-8 text-center text-slate-400">
+                        No products found. Add your first item using the button above.
                       </td>
                     </tr>
-                  );
-                }}
-              </For>
+                  </Show>
+
+                  <For each={filteredProducts()}>
+                    {(prod) => {
+                      const isLow = prod.currentStock <= prod.minStockAlert;
+                      return (
+                        <tr class="hover:bg-slate-50 transition-colors">
+                          <td class="p-3 font-bold text-slate-900">
+                            {prod.name}
+                            <Show when={prod.unit}>
+                              <span class="ml-1 text-[10px] text-slate-400 font-normal">({prod.unit})</span>
+                            </Show>
+                          </td>
+                          <td class="p-3 font-mono text-slate-600">
+                            {prod.barcode || '-'}
+                          </td>
+                          <td class="p-3">
+                            <span class="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-800">
+                              {prod.gstRate}%
+                            </span>
+                          </td>
+                          <td class="p-3 text-slate-500 font-medium">
+                            ₹{prod.mrp.toFixed(2)}
+                          </td>
+                          <td class="p-3 font-bold text-emerald-700">
+                            ₹{prod.sellingPrice.toFixed(2)}
+                          </td>
+                          <td class="p-3 font-bold text-slate-800">
+                            {prod.currentStock} {prod.unit}
+                          </td>
+                          <td class="p-3">
+                            <Show when={isLow} fallback={
+                              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                <Check class="w-3 h-3" /> In Stock
+                              </span>
+                            }>
+                              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
+                                <AlertTriangle class="w-3 h-3" /> Low Stock
+                              </span>
+                            </Show>
+                          </td>
+                        </tr>
+                      );
+                    }}
+                  </For>
+                </>
+              }>
+                <TableSkeleton cols={7} rows={pageSize()} />
+              </Show>
             </tbody>
           </table>
         </div>
