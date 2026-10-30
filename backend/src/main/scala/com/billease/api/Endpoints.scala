@@ -26,6 +26,25 @@ object Endpoints:
     .out(jsonBody[List[Tenant]])
     .errorOut(stringBody)
 
+  def createTenantEndpoint = baseEndpoint.post
+    .in("admin" / "tenants")
+    .in(auth.bearer[String]())
+    .in(jsonBody[TenantCreate])
+    .out(jsonBody[Tenant])
+    .errorOut(stringBody)
+
+  def toggleTenantActiveEndpoint = baseEndpoint.patch
+    .in("admin" / "tenants" / path[UUID]("tenantId") / "toggle")
+    .in(auth.bearer[String]())
+    .out(jsonBody[Option[Tenant]])
+    .errorOut(stringBody)
+
+  def deleteTenantEndpoint = baseEndpoint.delete
+    .in("admin" / "tenants" / path[UUID]("tenantId"))
+    .in(auth.bearer[String]())
+    .out(jsonBody[Boolean])
+    .errorOut(stringBody)
+
   def updateTenantEndpoint = baseEndpoint.put
     .in("tenants" / path[UUID]("tenantId"))
     .in(auth.bearer[String]())
@@ -180,4 +199,24 @@ object Endpoints:
     .in("tenants" / path[UUID]("tenantId") / "coupons" / path[UUID]("couponId") / "toggle")
     .in(auth.bearer[String]())
     .out(jsonBody[Option[Coupon]])
+    .errorOut(stringBody)
+
+  // Users / Cashier Management
+  def listTenantUsersEndpoint = baseEndpoint.get
+    .in("tenants" / path[UUID]("tenantId") / "users")
+    .in(auth.bearer[String]())
+    .out(jsonBody[List[User]])
+    .errorOut(stringBody)
+
+  def createTenantUserEndpoint = baseEndpoint.post
+    .in("tenants" / path[UUID]("tenantId") / "users")
+    .in(auth.bearer[String]())
+    .in(jsonBody[UserCreate])
+    .out(jsonBody[User])
+    .errorOut(stringBody)
+
+  def toggleUserActiveEndpoint = baseEndpoint.patch
+    .in("tenants" / path[UUID]("tenantId") / "users" / path[UUID]("userId") / "toggle")
+    .in(auth.bearer[String]())
+    .out(jsonBody[Option[User]])
     .errorOut(stringBody)

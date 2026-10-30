@@ -53,7 +53,8 @@ class TenantService(xa: Transactor[IO]):
             upiVpa = req.upiVpa.orElse(t.upiVpa),
             upiPayeeName = req.upiPayeeName.orElse(t.upiPayeeName),
             loyaltyPointsPer100 = req.loyaltyPointsPer100.getOrElse(t.loyaltyPointsPer100),
-            loyaltyPointValueRs = req.loyaltyPointValueRs.getOrElse(t.loyaltyPointValueRs)
+            loyaltyPointValueRs = req.loyaltyPointValueRs.getOrElse(t.loyaltyPointValueRs),
+            isActive = req.isActive.getOrElse(t.isActive)
           )
           sql"""
             UPDATE tenants SET
@@ -76,11 +77,67 @@ class TenantService(xa: Transactor[IO]):
               upi_payee_name = ${updated.upiPayeeName},
               loyalty_points_per_100 = ${updated.loyaltyPointsPer100},
               loyalty_point_value_rs = ${updated.loyaltyPointValueRs},
+              is_active = ${updated.isActive},
               updated_at = CURRENT_TIMESTAMP
             WHERE id = $id
           """.update.run.transact(xa).map(_ => Some(updated))
         case None => IO.pure(None)
     yield result
+
+  def createTenant(req: TenantCreate): IO[Tenant] =
+    val id = UUID.randomUUID()
+    val tenant = Tenant(
+      id = id,
+      slug = req.slug,
+      name = req.name,
+      legalName = req.legalName,
+      phone = req.phone,
+      email = req.email,
+      address = req.address,
+      city = req.city,
+      stateCode = req.stateCode,
+      hasGst = req.hasGst,
+      gstin = req.gstin,
+      isCompositionScheme = req.isCompositionScheme,
+      logoUrl = req.logoUrl,
+      bannerUrl = req.bannerUrl,
+      invoicePrefix = req.invoicePrefix,
+      invoiceFooter = req.invoiceFooter,
+      thermalWidthMm = req.thermalWidthMm,
+      upiVpa = req.upiVpa,
+      upiPayeeName = req.upiPayeeName,
+      loyaltyPointsPer100 = req.loyaltyPointsPer100,
+      loyaltyPointValueRs = req.loyaltyPointValueRs,
+      isActive = true
+    )
+    sql"""
+      INSERT INTO tenants (
+        id, slug, name, legal_name, phone, email, address, city, state_code,
+        has_gst, gstin, is_composition_scheme, logo_url, banner_url,
+        invoice_prefix, invoice_footer, thermal_width_mm, upi_vpa, upi_payee_name,
+        loyalty_points_per_100, loyalty_point_value_rs, is_active
+      ) VALUES (
+        ${tenant.id}, ${tenant.slug}, ${tenant.name}, ${tenant.legalName}, ${tenant.phone}, ${tenant.email},
+        ${tenant.address}, ${tenant.city}, ${tenant.stateCode}, ${tenant.hasGst}, ${tenant.gstin},
+        ${tenant.isCompositionScheme}, ${tenant.logoUrl}, ${tenant.bannerUrl}, ${tenant.invoicePrefix},
+        ${tenant.invoiceFooter}, ${tenant.thermalWidthMm}, ${tenant.upiVpa}, ${tenant.upiPayeeName},
+        ${tenant.loyaltyPointsPer100}, ${tenant.loyaltyPointValueRs}, true
+      )
+    """.update.run.transact(xa).map(_ => tenant)
+
+  def toggleTenantActive(id: UUID): IO[Option[Tenant]] =
+    sql"""
+      UPDATE tenants SET is_active = NOT is_active, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $id
+    """.update.run.transact(xa).flatMap { rows =>
+      if rows > 0 then getTenantById(id)
+      else IO.pure(None)
+    }
+
+  def deleteTenant(id: UUID): IO[Boolean] =
+    sql"""
+      DELETE FROM tenants WHERE id = $id
+    """.update.run.transact(xa).map(_ > 0)
 
   def listTenantUsers(tenantId: UUID): IO[List[User]] =
     sql"""
@@ -98,6 +155,17 @@ class TenantService(xa: Transactor[IO]):
       VALUES ($id, ${req.tenantId}, ${req.username}, ${req.password}, ${req.fullName}, ${req.email}, ${req.phone}, $roleStr, true)
     """.update.run.transact(xa).map { _ =>
       User(id, req.tenantId, req.username, req.fullName, req.email, req.phone, req.role, true)
+    }
+
+  def toggleUserActive(tenantId: UUID, userId: UUID): IO[Option[User]] =
+    sql"""
+      UPDATE users SET is_active = NOT is_active
+      WHERE id = $userId AND tenant_id = $tenantId
+    """.update.run.transact(xa).flatMap { rows =>
+      if rows > 0 then
+        sql"""SELECT id, tenant_id, username, full_name, email, phone, role, is_active
+              FROM users WHERE id = $userId""".query[User].option.transact(xa)
+      else IO.pure(None)
     }
 
   def authenticateUser(username: String, pass: String): IO[Option[(User, Option[Tenant])]] =
