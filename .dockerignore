@@ -7,6 +7,8 @@ AGENT.md
 .DS_Store
 frontend/node_modules
 frontend/dist
+landing/node_modules
+landing/dist
 backend/target
 backend/project/target
 backend/project/project
