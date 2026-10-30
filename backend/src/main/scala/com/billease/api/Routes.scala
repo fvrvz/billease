@@ -50,6 +50,39 @@ class Routes(
     }
   }
 
+  val createTenantRoute = Endpoints.createTenantEndpoint.serverLogic { (token, req) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.role == Role.SUPER_ADMIN =>
+        tenantService.createTenant(req).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Super Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
+  val toggleTenantActiveRoute = Endpoints.toggleTenantActiveEndpoint.serverLogic { (tenantId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.role == Role.SUPER_ADMIN =>
+        tenantService.toggleTenantActive(tenantId).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Super Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
+  val deleteTenantRoute = Endpoints.deleteTenantEndpoint.serverLogic { (tenantId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.role == Role.SUPER_ADMIN =>
+        tenantService.deleteTenant(tenantId).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Super Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
   val getTenantRoute = Endpoints.getTenantEndpoint.serverLogic { tenantId =>
     tenantService.getTenantById(tenantId).map(Right(_))
   }
@@ -287,9 +320,45 @@ class Routes(
     }
   }
 
+  val listTenantUsersRoute = Endpoints.listTenantUsersEndpoint.serverLogic { (tenantId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.role == Role.SUPER_ADMIN || (user.tenantId.contains(tenantId) && user.role == Role.STORE_ADMIN) =>
+        tenantService.listTenantUsers(tenantId).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Store Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
+  val createTenantUserRoute = Endpoints.createTenantUserEndpoint.serverLogic { (tenantId, token, req) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.tenantId.contains(tenantId) && user.role == Role.STORE_ADMIN || user.role == Role.SUPER_ADMIN =>
+        tenantService.createUser(req.copy(tenantId = Some(tenantId))).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Store Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
+  val toggleUserActiveRoute = Endpoints.toggleUserActiveEndpoint.serverLogic { (tenantId, userId, token) =>
+    requireAuth(token).flatMap {
+      case Right(user) if user.tenantId.contains(tenantId) && user.role == Role.STORE_ADMIN || user.role == Role.SUPER_ADMIN =>
+        tenantService.toggleUserActive(tenantId, userId).map(Right(_))
+      case Right(_) =>
+        IO.pure(Left("Store Admin permissions required"))
+      case Left(err) =>
+        IO.pure(Left(err))
+    }
+  }
+
   val allEndpoints = List(
     Endpoints.loginEndpoint,
     Endpoints.listTenantsEndpoint,
+    Endpoints.createTenantEndpoint,
+    Endpoints.toggleTenantActiveEndpoint,
+    Endpoints.deleteTenantEndpoint,
     Endpoints.getTenantEndpoint,
     Endpoints.updateTenantEndpoint,
     Endpoints.listProductsEndpoint,
@@ -310,7 +379,10 @@ class Routes(
     Endpoints.listCouponsEndpoint,
     Endpoints.createCouponEndpoint,
     Endpoints.validateCouponEndpoint,
-    Endpoints.toggleCouponEndpoint
+    Endpoints.toggleCouponEndpoint,
+    Endpoints.listTenantUsersEndpoint,
+    Endpoints.createTenantUserEndpoint,
+    Endpoints.toggleUserActiveEndpoint
   )
 
   val swaggerEndpoints = SwaggerInterpreter().fromEndpoints[IO](allEndpoints, "Billease API", "1.0.0")
@@ -318,6 +390,9 @@ class Routes(
   val allServerEndpoints = List(
     loginRoute,
     listTenantsRoute,
+    createTenantRoute,
+    toggleTenantActiveRoute,
+    deleteTenantRoute,
     getTenantRoute,
     updateTenantRoute,
     listProductsRoute,
@@ -338,7 +413,10 @@ class Routes(
     listCouponsRoute,
     createCouponRoute,
     validateCouponRoute,
-    toggleCouponRoute
+    toggleCouponRoute,
+    listTenantUsersRoute,
+    createTenantUserRoute,
+    toggleUserActiveRoute
   ) ++ swaggerEndpoints
 
   val httpRoutes: HttpRoutes[IO] = Http4sServerInterpreter[IO]().toRoutes(allServerEndpoints)

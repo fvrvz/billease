@@ -1,4 +1,4 @@
-import { Component, createSignal, onMount, onCleanup, For, Show } from 'solid-js';
+import { Component, createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Product, Customer, CartItem, PaymentMode, PaymentStatus, Invoice } from '../types';
 import { apiClient } from '../api/client';
@@ -56,6 +56,8 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
       ]);
       setProducts(pRes.items);
       setCustomers(cRes.items);
+    } catch (err) {
+      console.error('[POSRegister] Error loading products/customers:', err);
     } finally {
       setLoading(false);
     }
@@ -71,9 +73,18 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
     setIsPaymentModalOpen(true);
   };
 
-  onMount(() => {
-    loadData();
+  // Reactive load: fires whenever tenant becomes available
+  createEffect(() => {
+    const t = tenant();
+    if (t) {
+      loadData();
+    }
+  });
 
+  onMount(() => {
+    if (tenant() && products().length === 0) {
+      loadData();
+    }
     // Global keyboard shortcuts: F2 (Search), F4 (Cash), F5 (UPI), F6 (Khata)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F2') {

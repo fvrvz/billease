@@ -1,13 +1,25 @@
 import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { Tenant } from '../types';
-import { Store, Plus, CheckCircle2, Globe, Phone } from 'lucide-solid';
+import { Tenant, TenantCreateInput } from '../types';
+import { apiClient } from '../api/client';
+import {
+  Store,
+  Plus,
+  CheckCircle2,
+  XCircle,
+  Globe,
+  Phone,
+  Trash2,
+  RefreshCw,
+} from 'lucide-solid';
 
 export const SuperAdminDashboard: Component = () => {
-  const { tenant } = useAuth();
+  const { tenant, token } = useAuth();
 
   const [tenants, setTenants] = createSignal<Tenant[]>([]);
+  const [loading, setLoading] = createSignal(true);
   const [showOnboardModal, setShowOnboardModal] = createSignal(false);
+  const [submitting, setSubmitting] = createSignal(false);
 
   // Onboard form
   const [storeName, setStoreName] = createSignal('');
@@ -21,64 +33,69 @@ export const SuperAdminDashboard: Component = () => {
   const [featLoyalty, setFeatLoyalty] = createSignal(true);
   const [featThermal, setFeatThermal] = createSignal(true);
 
-  onMount(() => {
-    // Populate sample tenants list
-    const current = tenant();
-    if (current) {
-      setTenants([
-        current,
-        {
-          id: 'a0000000-0000-0000-0000-000000000002',
-          slug: 'laxmi-kirana-general-store',
-          name: 'Laxmi Kirana & General Store',
-          legalName: 'Laxmi Retailers Pvt Ltd',
-          phone: '+91 98230 45678',
-          email: 'laxmi.store@gmail.com',
-          city: 'Nagpur',
-          stateCode: '27',
-          hasGst: false,
-          isCompositionScheme: true,
-          invoicePrefix: 'LKG',
-          invoiceFooter: 'Dhanyawad! Phir aaiye.',
-          thermalWidthMm: 58,
-          upiVpa: 'laxmikirana@paytm',
-          upiPayeeName: 'Laxmi Kirana',
-          loyaltyPointsPer100: 1,
-          loyaltyPointValueRs: 1,
-          isActive: true
-        },
-        {
-          id: 'a0000000-0000-0000-0000-000000000003',
-          slug: 'apollo-wellness-pharma',
-          name: 'Janata Medico & Pharma',
-          legalName: 'Janata Drug Agency',
-          phone: '+91 99887 65432',
-          email: 'janatamedico@pharma.in',
-          city: 'Indore',
-          stateCode: '23',
-          hasGst: true,
-          gstin: '23AABCT1234D1Z2',
-          isCompositionScheme: false,
-          invoicePrefix: 'JMP',
-          invoiceFooter: 'Get well soon. No return without bill.',
-          thermalWidthMm: 80,
-          upiVpa: 'janatamedico@icici',
-          upiPayeeName: 'Janata Medico',
-          loyaltyPointsPer100: 2,
-          loyaltyPointValueRs: 1,
-          isActive: true
-        }
-      ]);
+  const loadTenants = async () => {
+    setLoading(true);
+    try {
+      const data = await apiClient.listTenants(token());
+      if (data && data.length > 0) {
+        setTenants(data);
+      } else {
+        const current = tenant();
+        if (current) setTenants([current]);
+      }
+    } catch (_) {
+      const current = tenant();
+      if (current) setTenants([current]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  onMount(() => {
+    loadTenants();
   });
 
-  const handleOnboardTenant = (e: Event) => {
+  const handleToggleTenant = async (t: Tenant) => {
+    const confirmMsg = t.isActive
+      ? `Disable retailer "${t.name}"? Cashiers and store owners won't be able to bill.`
+      : `Re-activate retailer "${t.name}"?`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const updated = await apiClient.toggleTenantActive(t.id, token());
+      if (updated) {
+        setTenants((prev) =>
+          prev.map((item) => (item.id === t.id ? { ...item, isActive: updated.isActive } : item))
+        );
+      } else {
+        setTenants((prev) =>
+          prev.map((item) => (item.id === t.id ? { ...item, isActive: !item.isActive } : item))
+        );
+      }
+    } catch (_) {
+      alert('Failed to update retailer status.');
+    }
+  };
+
+  const handleRemoveTenant = async (t: Tenant) => {
+    if (!confirm(`Are you sure you want to completely remove retailer "${t.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await apiClient.deleteTenant(t.id, token());
+      setTenants((prev) => prev.filter((item) => item.id !== t.id));
+    } catch (_) {
+      alert('Failed to remove retailer.');
+    }
+  };
+
+  const handleOnboardTenant = async (e: Event) => {
     e.preventDefault();
     if (!storeName().trim() || !phone().trim()) return;
 
+    setSubmitting(true);
     const slug = storeName().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const newTenant: Tenant = {
-      id: 'a0000000-0000-0000-0000-00000000000' + (tenants().length + 1),
+    const input: TenantCreateInput = {
       slug,
       name: storeName().trim(),
       phone: phone().trim(),
@@ -94,14 +111,38 @@ export const SuperAdminDashboard: Component = () => {
       upiPayeeName: storeName().trim(),
       loyaltyPointsPer100: 1,
       loyaltyPointValueRs: 1,
-      isActive: true
     };
 
-    setTenants([...tenants(), newTenant]);
-    setStoreName('');
-    setPhone('');
-    setGstin('');
-    setShowOnboardModal(false);
+    try {
+      const created = await apiClient.createTenant(token(), input);
+      if (created) {
+        setTenants((prev) => [...prev, created]);
+      } else {
+        // Fallback local addition
+        const fallbackTenant: Tenant = {
+          id: 'a0000000-0000-0000-0000-00000000000' + (tenants().length + 1),
+          ...input,
+          stateCode: input.stateCode || '27',
+          hasGst: input.hasGst || false,
+          isCompositionScheme: false,
+          invoicePrefix: input.invoicePrefix || 'INV',
+          invoiceFooter: input.invoiceFooter || 'Thank you for shopping with us!',
+          thermalWidthMm: 80,
+          loyaltyPointsPer100: 1,
+          loyaltyPointValueRs: 1,
+          isActive: true,
+        };
+        setTenants((prev) => [...prev, fallbackTenant]);
+      }
+      setStoreName('');
+      setPhone('');
+      setGstin('');
+      setShowOnboardModal(false);
+    } catch (_) {
+      alert('Failed to onboard retailer.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -150,51 +191,98 @@ export const SuperAdminDashboard: Component = () => {
 
       {/* Stores List */}
       <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div class="p-4 border-b border-slate-200">
+        <div class="p-4 border-b border-slate-200 flex items-center justify-between">
           <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider">
             All Onboarded Tenants / Retailers
           </h3>
+          <button
+            onClick={loadTenants}
+            class="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw class={`w-3.5 h-3.5 ${loading() ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
         </div>
 
-        <div class="divide-y divide-slate-100">
-          <For each={tenants()}>
-            {(t) => (
-              <div class="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                <div class="space-y-1">
+        <Show
+          when={!loading()}
+          fallback={
+            <div class="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+              <RefreshCw class="w-6 h-6 animate-spin text-purple-600" />
+              <span>Loading registered retailers...</span>
+            </div>
+          }
+        >
+          <div class="divide-y divide-slate-100">
+            <For
+              each={tenants()}
+              fallback={
+                <div class="p-8 text-center text-slate-400 text-xs">
+                  No retailers registered yet. Click "Onboard New Retailer" to add one.
+                </div>
+              }
+            >
+              {(t) => (
+                <div class="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                  <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-slate-900 text-sm">{t.name}</span>
+                      <span class="text-xs font-mono text-slate-400">({t.slug})</span>
+                      <Show when={t.hasGst} fallback={
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                          Composition / No GST
+                        </span>
+                      }>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          GST: {t.gstin}
+                        </span>
+                      </Show>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-slate-500">
+                      <span class="flex items-center gap-1"><Phone class="w-3 h-3" /> {t.phone}</span>
+                      <span>•</span>
+                      <span class="flex items-center gap-1"><Globe class="w-3 h-3" /> {t.city || 'India'}</span>
+                      <span>•</span>
+                      <span>Thermal: {t.thermalWidthMm}mm</span>
+                    </div>
+                  </div>
+
                   <div class="flex items-center gap-2">
-                    <span class="font-bold text-slate-900 text-sm">{t.name}</span>
-                    <span class="text-xs font-mono text-slate-400">({t.slug})</span>
-                    <Show when={t.hasGst} fallback={
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                        Composition / No GST
-                      </span>
-                    }>
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        GST: {t.gstin}
+                    <Show
+                      when={t.isActive}
+                      fallback={
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <XCircle class="w-3.5 h-3.5" /> Disabled
+                        </span>
+                      }
+                    >
+                      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 class="w-3.5 h-3.5" /> Active
                       </span>
                     </Show>
-                  </div>
-                  <div class="flex items-center gap-3 text-xs text-slate-500">
-                    <span class="flex items-center gap-1"><Phone class="w-3 h-3" /> {t.phone}</span>
-                    <span>•</span>
-                    <span class="flex items-center gap-1"><Globe class="w-3 h-3" /> {t.city || 'India'}</span>
-                    <span>•</span>
-                    <span>Thermal: {t.thermalWidthMm}mm</span>
+                    <button
+                      onClick={() => handleToggleTenant(t)}
+                      class={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-colors ${
+                        t.isActive
+                          ? "border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100"
+                          : "border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {t.isActive ? "Disable" : "Re-activate"}
+                    </button>
+                    <button
+                      onClick={() => handleRemoveTenant(t)}
+                      class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                      title="Remove Retailer"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-
-                <div class="flex items-center gap-2">
-                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <CheckCircle2 class="w-3.5 h-3.5" /> Active
-                  </span>
-                  <button class="px-2.5 py-1 text-xs border border-slate-200 rounded-lg font-semibold hover:bg-slate-100 text-slate-700">
-                    Manage Permissions
-                  </button>
-                </div>
-              </div>
-            )}
-          </For>
-        </div>
+              )}
+            </For>
+          </div>
+        </Show>
       </div>
 
       {/* Onboard Retailer Modal */}
@@ -333,9 +421,10 @@ export const SuperAdminDashboard: Component = () => {
                 </button>
                 <button
                   type="submit"
-                  class="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold transition-colors shadow-xs"
+                  disabled={submitting()}
+                  class="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold transition-colors shadow-xs disabled:opacity-50"
                 >
-                  Create & Activate Store
+                  {submitting() ? "Creating & Activating..." : "Create & Activate Store"}
                 </button>
               </div>
             </form>

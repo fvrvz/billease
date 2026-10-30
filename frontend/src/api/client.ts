@@ -1,5 +1,8 @@
 import {
   Tenant,
+  User,
+  UserCreateInput,
+  TenantCreateInput,
   Product,
   Customer,
   Coupon,
@@ -19,19 +22,22 @@ import {
   ProductFilterParams,
   InvoiceFilterParams,
   CustomerFilterParams,
-  SoldItemFilterParams
-} from '../types';
-import { apiCache } from '../utils/cache';
-import { downloadInvoicePdfLocally } from '../utils/pdfGenerator';
+  SoldItemFilterParams,
+} from "../types";
+import { apiCache } from "../utils/cache";
+import { downloadInvoicePdfLocally } from "../utils/pdfGenerator";
 
-const API_BASE = '/api';
+const API_BASE = "/api";
 
 export const apiClient = {
-  async login(username: string, password: string): Promise<LoginResponse | null> {
+  async login(
+    username: string,
+    password: string,
+  ): Promise<LoginResponse | null> {
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
       if (res.ok) return (await res.json()) as LoginResponse;
@@ -49,20 +55,24 @@ export const apiClient = {
         } catch (_) {}
         return getFallbackTenant();
       },
-      { ttlMs: 300_000, forceRefresh, staleWhileRevalidate: true }
+      { ttlMs: 300_000, forceRefresh, staleWhileRevalidate: true },
     );
   },
 
-  async updateTenant(tenantId: string, token: string, updates: Partial<Tenant>): Promise<Tenant> {
+  async updateTenant(
+    tenantId: string,
+    token: string,
+    updates: Partial<Tenant>,
+  ): Promise<Tenant> {
     apiCache.invalidate(`tenant:${tenantId}`);
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(updates)
+        body: JSON.stringify(updates),
       });
       if (res.ok) {
         const updated = (await res.json()) as Tenant;
@@ -72,31 +82,118 @@ export const apiClient = {
     } catch (_) {}
     const current = getFallbackTenant();
     const updated: Tenant = { ...current, ...updates };
-    localStorage.setItem('billease_tenant', JSON.stringify(updated));
+    localStorage.setItem("billease_tenant", JSON.stringify(updated));
     apiCache.set(`tenant:${tenantId}`, updated, 300_000);
     return updated;
   },
 
+  async listTenants(token: string): Promise<Tenant[]> {
+    try {
+      const res = await fetch(`${API_BASE}/admin/tenants`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as Tenant[];
+    } catch (_) {}
+    return getFallbackTenants();
+  },
+
+  async createTenant(token: string, data: TenantCreateInput): Promise<Tenant | null> {
+    try {
+      const res = await fetch(`${API_BASE}/admin/tenants`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) return (await res.json()) as Tenant;
+    } catch (_) {}
+    return null;
+  },
+
+  async toggleTenantActive(tenantId: string, token: string): Promise<Tenant | null> {
+    try {
+      const res = await fetch(`${API_BASE}/admin/tenants/${tenantId}/toggle`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as Tenant;
+    } catch (_) {}
+    return null;
+  },
+
+  async deleteTenant(tenantId: string, token: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/admin/tenants/${tenantId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as boolean;
+    } catch (_) {}
+    return false;
+  },
+
+  async listUsers(tenantId: string, token: string): Promise<User[]> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as User[];
+    } catch (_) {}
+    return getFallbackUsers(tenantId);
+  },
+
+  async createUser(tenantId: string, token: string, input: UserCreateInput): Promise<User | null> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      });
+      if (res.ok) return (await res.json()) as User;
+    } catch (_) {}
+    return null;
+  },
+
+  async toggleUserActive(tenantId: string, userId: string, token: string): Promise<User | null> {
+    try {
+      const res = await fetch(`${API_BASE}/tenants/${tenantId}/users/${userId}/toggle`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) return (await res.json()) as User;
+    } catch (_) {}
+    return null;
+  },
+
   async listProducts(
     tenantId: string,
-    params?: ProductFilterParams | string
+    params?: ProductFilterParams | string,
   ): Promise<PagedResponse<Product>> {
     const filter: ProductFilterParams =
-      typeof params === 'string' ? { q: params } : params || {};
+      typeof params === "string" ? { q: params } : params || {};
     const queryParts: string[] = [];
     if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
-    if (filter.categoryId) queryParts.push(`categoryId=${encodeURIComponent(filter.categoryId)}`);
-    if (filter.inStockOnly !== undefined) queryParts.push(`inStockOnly=${filter.inStockOnly}`);
+    if (filter.categoryId)
+      queryParts.push(`categoryId=${encodeURIComponent(filter.categoryId)}`);
+    if (filter.inStockOnly !== undefined)
+      queryParts.push(`inStockOnly=${filter.inStockOnly}`);
     if (filter.page) queryParts.push(`page=${filter.page}`);
     if (filter.limit) queryParts.push(`limit=${filter.limit}`);
-    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    const qs = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
 
     const cacheKey = `products:${tenantId}:${qs}`;
     return apiCache.fetchWithCache(
       cacheKey,
       async () => {
         try {
-          const res = await fetch(`${API_BASE}/tenants/${tenantId}/products${qs}`);
+          const res = await fetch(
+            `${API_BASE}/tenants/${tenantId}/products${qs}`,
+          );
           if (res.ok) return (await res.json()) as PagedResponse<Product>;
         } catch (_) {}
         const fallbackList = getFallbackProducts(filter.q);
@@ -105,69 +202,84 @@ export const apiClient = {
           total: fallbackList.length,
           page: filter.page || 1,
           limit: filter.limit || 50,
-          totalPages: Math.max(1, Math.ceil(fallbackList.length / (filter.limit || 50)))
+          totalPages: Math.max(
+            1,
+            Math.ceil(fallbackList.length / (filter.limit || 50)),
+          ),
         };
       },
-      { ttlMs: 120_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+      {
+        ttlMs: 120_000,
+        forceRefresh: filter.forceRefresh,
+        staleWhileRevalidate: true,
+      },
     );
   },
 
-  async createProduct(tenantId: string, token: string, product: ProductCreateInput): Promise<Product> {
-    apiCache.invalidate('products:');
+  async createProduct(
+    tenantId: string,
+    token: string,
+    product: ProductCreateInput,
+  ): Promise<Product> {
+    apiCache.invalidate("products:");
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/products`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(product)
+        body: JSON.stringify(product),
       });
       if (res.ok) return (await res.json()) as Product;
     } catch (_) {}
     const newProduct: Product = {
-      id: 'prod-' + Date.now(),
+      id: "prod-" + Date.now(),
       tenantId,
       name: product.name,
-      barcode: product.barcode || '',
-      sku: product.sku || '',
-      unit: product.unit || 'PCS',
-      hsnCode: product.hsnCode || '',
+      barcode: product.barcode || "",
+      sku: product.sku || "",
+      unit: product.unit || "PCS",
+      hsnCode: product.hsnCode || "",
       gstRate: product.gstRate || 0,
       isPriceTaxInclusive: product.isPriceTaxInclusive ?? true,
       minStockAlert: product.minStockAlert || 5,
       isActive: true,
       currentStock: product.initialQuantity || 0,
       mrp: product.mrp,
-      sellingPrice: product.sellingPrice
+      sellingPrice: product.sellingPrice,
     };
     const list = getFallbackProducts();
     list.unshift(newProduct);
-    localStorage.setItem('billease_products', JSON.stringify(list));
+    localStorage.setItem("billease_products", JSON.stringify(list));
     return newProduct;
   },
 
   async listCustomers(
     tenantId: string,
     token: string,
-    params?: CustomerFilterParams
+    params?: CustomerFilterParams,
   ): Promise<PagedResponse<Customer>> {
     const filter = params || {};
     const queryParts: string[] = [];
     if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
-    if (filter.withDueOnly !== undefined) queryParts.push(`withDueOnly=${filter.withDueOnly}`);
+    if (filter.withDueOnly !== undefined)
+      queryParts.push(`withDueOnly=${filter.withDueOnly}`);
     if (filter.page) queryParts.push(`page=${filter.page}`);
     if (filter.limit) queryParts.push(`limit=${filter.limit}`);
-    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    const qs = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
 
     const cacheKey = `customers:${tenantId}:${qs}`;
     return apiCache.fetchWithCache(
       cacheKey,
       async () => {
         try {
-          const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers${qs}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+          const res = await fetch(
+            `${API_BASE}/tenants/${tenantId}/customers${qs}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (res.ok) return (await res.json()) as PagedResponse<Customer>;
         } catch (_) {}
         const fallbackList = getFallbackCustomers();
@@ -176,28 +288,39 @@ export const apiClient = {
           total: fallbackList.length,
           page: filter.page || 1,
           limit: filter.limit || 50,
-          totalPages: Math.max(1, Math.ceil(fallbackList.length / (filter.limit || 50)))
+          totalPages: Math.max(
+            1,
+            Math.ceil(fallbackList.length / (filter.limit || 50)),
+          ),
         };
       },
-      { ttlMs: 120_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+      {
+        ttlMs: 120_000,
+        forceRefresh: filter.forceRefresh,
+        staleWhileRevalidate: true,
+      },
     );
   },
 
-  async createCustomer(tenantId: string, token: string, customer: CustomerCreateInput): Promise<Customer> {
-    apiCache.invalidate('customers:');
+  async createCustomer(
+    tenantId: string,
+    token: string,
+    customer: CustomerCreateInput,
+  ): Promise<Customer> {
+    apiCache.invalidate("customers:");
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(customer)
+        body: JSON.stringify(customer),
       });
       if (res.ok) return (await res.json()) as Customer;
     } catch (_) {}
     const newCust: Customer = {
-      id: 'cust-' + Date.now(),
+      id: "cust-" + Date.now(),
       tenantId,
       name: customer.name,
       phone: customer.phone,
@@ -205,61 +328,75 @@ export const apiClient = {
       address: customer.address,
       creditLimit: customer.creditLimit || 5000,
       currentDue: 0,
-      loyaltyPoints: 0
+      loyaltyPoints: 0,
     };
     const list = getFallbackCustomers();
     list.push(newCust);
-    localStorage.setItem('billease_customers', JSON.stringify(list));
+    localStorage.setItem("billease_customers", JSON.stringify(list));
     return newCust;
   },
 
-  async recordKhataPayment(tenantId: string, token: string, customerId: string, amount: number, paymentMethod: string, notes?: string): Promise<Customer> {
-    apiCache.invalidate('customers:');
+  async recordKhataPayment(
+    tenantId: string,
+    token: string,
+    customerId: string,
+    amount: number,
+    paymentMethod: string,
+    notes?: string,
+  ): Promise<Customer> {
+    apiCache.invalidate("customers:");
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/customers/payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/customers/payment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ customerId, amount, paymentMethod, notes }),
         },
-        body: JSON.stringify({ customerId, amount, paymentMethod, notes })
-      });
+      );
       if (res.ok) return (await res.json()) as Customer;
     } catch (_) {}
     const list = getFallbackCustomers();
-    const cust = list.find(c => c.id === customerId);
+    const cust = list.find((c) => c.id === customerId);
     if (cust) {
       cust.currentDue = Math.max(0, cust.currentDue - amount);
-      localStorage.setItem('billease_customers', JSON.stringify(list));
+      localStorage.setItem("billease_customers", JSON.stringify(list));
       return cust;
     }
-    throw new Error('Customer not found');
+    throw new Error("Customer not found");
   },
 
   async listCoupons(tenantId: string, token: string): Promise<Coupon[]> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) return (await res.json()) as Coupon[];
     } catch (_) {}
     return getFallbackCoupons();
   },
 
-  async createCoupon(tenantId: string, token: string, coupon: CouponCreateInput): Promise<Coupon> {
+  async createCoupon(
+    tenantId: string,
+    token: string,
+    coupon: CouponCreateInput,
+  ): Promise<Coupon> {
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(coupon)
+        body: JSON.stringify(coupon),
       });
       if (res.ok) return (await res.json()) as Coupon;
     } catch (_) {}
     const newCoupon: Coupon = {
-      id: 'coup-' + Date.now(),
+      id: "coup-" + Date.now(),
       tenantId,
       code: coupon.code.toUpperCase(),
       discountType: coupon.discountType,
@@ -269,132 +406,196 @@ export const apiClient = {
       validUntil: coupon.validUntil,
       usageCount: 0,
       maxUsage: coupon.maxUsage || 1000,
-      isActive: true
+      isActive: true,
     };
     const list = getFallbackCoupons();
     list.unshift(newCoupon);
-    localStorage.setItem('billease_coupons', JSON.stringify(list));
+    localStorage.setItem("billease_coupons", JSON.stringify(list));
     return newCoupon;
   },
 
-  async validateCoupon(tenantId: string, code: string, cartTotal: number): Promise<{ isValid: boolean; discountAmount: number; message: string }> {
+  async validateCoupon(
+    tenantId: string,
+    code: string,
+    cartTotal: number,
+  ): Promise<{ isValid: boolean; discountAmount: number; message: string }> {
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, cartTotal })
-      });
-      if (res.ok) return (await res.json()) as { isValid: boolean; discountAmount: number; message: string };
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/coupons/validate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, cartTotal }),
+        },
+      );
+      if (res.ok)
+        return (await res.json()) as {
+          isValid: boolean;
+          discountAmount: number;
+          message: string;
+        };
     } catch (_) {}
     const coupons = getFallbackCoupons();
-    const found = coupons.find(c => c.code.toUpperCase() === code.toUpperCase() && c.isActive);
+    const found = coupons.find(
+      (c) => c.code.toUpperCase() === code.toUpperCase() && c.isActive,
+    );
     if (!found) {
-      return { isValid: false, discountAmount: 0, message: `Coupon '${code}' is invalid or expired` };
+      return {
+        isValid: false,
+        discountAmount: 0,
+        message: `Coupon '${code}' is invalid or expired`,
+      };
     }
     if (cartTotal < found.minOrderAmount) {
-      return { isValid: false, discountAmount: 0, message: `Minimum order of ₹${found.minOrderAmount} required for coupon` };
+      return {
+        isValid: false,
+        discountAmount: 0,
+        message: `Minimum order of ₹${found.minOrderAmount} required for coupon`,
+      };
     }
-    let discount = found.discountType === 'FLAT' 
-      ? Math.min(found.discountValue, cartTotal)
-      : (cartTotal * found.discountValue) / 100;
+    let discount =
+      found.discountType === "FLAT"
+        ? Math.min(found.discountValue, cartTotal)
+        : (cartTotal * found.discountValue) / 100;
     if (found.maxDiscountCap) {
       discount = Math.min(discount, found.maxDiscountCap);
     }
     discount = Math.round(discount * 100) / 100;
-    return { isValid: true, discountAmount: discount, message: `Coupon applied! Saved ₹${discount}` };
+    return {
+      isValid: true,
+      discountAmount: discount,
+      message: `Coupon applied! Saved ₹${discount}`,
+    };
   },
 
-  async toggleCoupon(tenantId: string, couponId: string, token: string): Promise<Coupon | null> {
+  async toggleCoupon(
+    tenantId: string,
+    couponId: string,
+    token: string,
+  ): Promise<Coupon | null> {
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/coupons/${couponId}/toggle`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/coupons/${couponId}/toggle`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (res.ok) return (await res.json()) as Coupon | null;
     } catch (_) {}
     // Offline fallback: toggle in localStorage
     const coupons = getFallbackCoupons();
-    const idx = coupons.findIndex(c => c.id === couponId);
+    const idx = coupons.findIndex((c) => c.id === couponId);
     if (idx >= 0) {
       coupons[idx] = { ...coupons[idx], isActive: !coupons[idx].isActive };
-      localStorage.setItem('billease_coupons', JSON.stringify(coupons));
+      localStorage.setItem("billease_coupons", JSON.stringify(coupons));
       return coupons[idx];
     }
     return null;
   },
 
-  async createInvoice(tenantId: string, token: string, invoiceData: InvoiceCreateInput): Promise<Invoice> {
-    apiCache.invalidate('invoices:');
-    apiCache.invalidate('sales:');
-    apiCache.invalidate('sold-items:');
-    apiCache.invalidate('products:');
-    apiCache.invalidate('customers:');
+  async createInvoice(
+    tenantId: string,
+    token: string,
+    invoiceData: InvoiceCreateInput,
+  ): Promise<Invoice> {
+    apiCache.invalidate("invoices:");
+    apiCache.invalidate("sales:");
+    apiCache.invalidate("sold-items:");
+    apiCache.invalidate("products:");
+    apiCache.invalidate("customers:");
     try {
       const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(invoiceData)
+        body: JSON.stringify(invoiceData),
       });
       if (res.ok) return (await res.json()) as Invoice;
     } catch (_) {}
 
     // Offline / Mock calculation
     const tenant = getFallbackTenant();
-    const subtotal = invoiceData.items.reduce((acc: number, it: InvoiceItemInput) => acc + (it.unitPrice * it.quantity), 0);
-    const itemDiscTotal = invoiceData.items.reduce((acc: number, it: InvoiceItemInput) => {
-      const disc = (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100;
-      return acc + disc;
-    }, 0);
-    const billDiscAmt = (invoiceData.billDiscountPercent && invoiceData.billDiscountPercent > 0)
-      ? (subtotal * invoiceData.billDiscountPercent) / 100 
-      : (invoiceData.billDiscountAmount || 0);
+    const subtotal = invoiceData.items.reduce(
+      (acc: number, it: InvoiceItemInput) => acc + it.unitPrice * it.quantity,
+      0,
+    );
+    const itemDiscTotal = invoiceData.items.reduce(
+      (acc: number, it: InvoiceItemInput) => {
+        const disc =
+          (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100;
+        return acc + disc;
+      },
+      0,
+    );
+    const billDiscAmt =
+      invoiceData.billDiscountPercent && invoiceData.billDiscountPercent > 0
+        ? (subtotal * invoiceData.billDiscountPercent) / 100
+        : invoiceData.billDiscountAmount || 0;
     const couponDiscAmt = invoiceData.couponDiscountAmount || 0;
-    const loyaltyDiscAmt = (invoiceData.redeemLoyaltyPoints || 0) * tenant.loyaltyPointValueRs;
+    const loyaltyDiscAmt =
+      (invoiceData.redeemLoyaltyPoints || 0) * tenant.loyaltyPointValueRs;
 
-    const netBeforeRound = Math.max(0, subtotal - itemDiscTotal - billDiscAmt - couponDiscAmt - loyaltyDiscAmt);
+    const netBeforeRound = Math.max(
+      0,
+      subtotal - itemDiscTotal - billDiscAmt - couponDiscAmt - loyaltyDiscAmt,
+    );
     const grandTotal = Math.round(netBeforeRound);
     const roundOff = Math.round((grandTotal - netBeforeRound) * 100) / 100;
 
-    const invItems: InvoiceItem[] = invoiceData.items.map((it: InvoiceItemInput, idx: number) => {
-      const lineTotal = it.unitPrice * it.quantity * (1 - (it.discountPercent || 0)/100);
-      const taxRate = tenant.hasGst ? (it.gstRate || 0) : 0;
-      const divisor = 1 + (taxRate / 100);
-      const taxable = Math.round((lineTotal / divisor) * 100) / 100;
-      const tax = Math.round((lineTotal - taxable) * 100) / 100;
-      const halfTax = Math.round((tax / 2) * 100) / 100;
+    const invItems: InvoiceItem[] = invoiceData.items.map(
+      (it: InvoiceItemInput, idx: number) => {
+        const lineTotal =
+          it.unitPrice * it.quantity * (1 - (it.discountPercent || 0) / 100);
+        const taxRate = tenant.hasGst ? it.gstRate || 0 : 0;
+        const divisor = 1 + taxRate / 100;
+        const taxable = Math.round((lineTotal / divisor) * 100) / 100;
+        const tax = Math.round((lineTotal - taxable) * 100) / 100;
+        const halfTax = Math.round((tax / 2) * 100) / 100;
 
-      return {
-        id: `item-${Date.now()}-${idx}`,
-        invoiceId: 'inv-' + Date.now(),
-        tenantId,
-        productId: it.productId,
-        productName: it.productName,
-        quantity: it.quantity,
-        unit: 'PCS',
-        unitPrice: it.unitPrice,
-        mrp: it.mrp || it.unitPrice,
-        discountPercent: it.discountPercent || 0,
-        discountAmount: (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100,
-        gstRate: taxRate,
-        cgstAmount: halfTax,
-        sgstAmount: tax - halfTax,
-        igstAmount: 0,
-        totalAmount: lineTotal
-      };
-    });
+        return {
+          id: `item-${Date.now()}-${idx}`,
+          invoiceId: "inv-" + Date.now(),
+          tenantId,
+          productId: it.productId,
+          productName: it.productName,
+          quantity: it.quantity,
+          unit: "PCS",
+          unitPrice: it.unitPrice,
+          mrp: it.mrp || it.unitPrice,
+          discountPercent: it.discountPercent || 0,
+          discountAmount:
+            (it.unitPrice * it.quantity * (it.discountPercent || 0)) / 100,
+          gstRate: taxRate,
+          cgstAmount: halfTax,
+          sgstAmount: tax - halfTax,
+          igstAmount: 0,
+          totalAmount: lineTotal,
+        };
+      },
+    );
 
-    const totalCgst = invItems.reduce((acc: number, it: InvoiceItem) => acc + it.cgstAmount, 0);
-    const totalSgst = invItems.reduce((acc: number, it: InvoiceItem) => acc + it.sgstAmount, 0);
-    const totalTaxable = invItems.reduce((acc: number, it: InvoiceItem) => acc + (it.totalAmount - (it.cgstAmount + it.sgstAmount)), 0);
+    const totalCgst = invItems.reduce(
+      (acc: number, it: InvoiceItem) => acc + it.cgstAmount,
+      0,
+    );
+    const totalSgst = invItems.reduce(
+      (acc: number, it: InvoiceItem) => acc + it.sgstAmount,
+      0,
+    );
+    const totalTaxable = invItems.reduce(
+      (acc: number, it: InvoiceItem) =>
+        acc + (it.totalAmount - (it.cgstAmount + it.sgstAmount)),
+      0,
+    );
 
     const invoice: Invoice = {
-      id: 'inv-' + Date.now(),
+      id: "inv-" + Date.now(),
       tenantId,
       invoiceNumber: `${tenant.invoicePrefix}-${Math.floor(100000 + Math.random() * 900000)}`,
-      invoiceType: tenant.hasGst ? 'TAX_INVOICE' : 'RETAIL_BILL',
+      invoiceType: tenant.hasGst ? "TAX_INVOICE" : "RETAIL_BILL",
       customerId: invoiceData.customerId,
       customerName: invoiceData.customerName,
       customerPhone: invoiceData.customerPhone,
@@ -413,39 +614,43 @@ export const apiClient = {
       roundOff,
       grandTotal,
       paymentMode: invoiceData.paymentMode,
-      paymentStatus: invoiceData.paymentStatus || 'COMPLETED',
+      paymentStatus: invoiceData.paymentStatus || "COMPLETED",
       cashTendered: invoiceData.cashTendered || 0,
       changeReturned: Math.max(0, (invoiceData.cashTendered || 0) - grandTotal),
-      cashierName: 'Counter Cashier',
+      cashierName: "Counter Cashier",
       notes: invoiceData.notes,
       createdAt: new Date().toISOString(),
-      items: invItems
+      items: invItems,
     };
 
     // Update customer Udhaar if applicable (only if payment is COMPLETED)
-    if (invoiceData.customerId && invoiceData.paymentMode === 'CREDIT_KHATA' && (invoiceData.paymentStatus || 'COMPLETED') === 'COMPLETED') {
+    if (
+      invoiceData.customerId &&
+      invoiceData.paymentMode === "CREDIT_KHATA" &&
+      (invoiceData.paymentStatus || "COMPLETED") === "COMPLETED"
+    ) {
       const customers = getFallbackCustomers();
-      const c = customers.find(x => x.id === invoiceData.customerId);
+      const c = customers.find((x) => x.id === invoiceData.customerId);
       if (c) {
         c.currentDue += grandTotal;
-        localStorage.setItem('billease_customers', JSON.stringify(customers));
+        localStorage.setItem("billease_customers", JSON.stringify(customers));
       }
     }
 
     // Deduct local product stock
     const prods = getFallbackProducts();
     invoiceData.items.forEach((it: InvoiceItemInput) => {
-      const p = prods.find(x => x.id === it.productId);
+      const p = prods.find((x) => x.id === it.productId);
       if (p) {
         p.currentStock = Math.max(0, p.currentStock - it.quantity);
       }
     });
-    localStorage.setItem('billease_products', JSON.stringify(prods));
+    localStorage.setItem("billease_products", JSON.stringify(prods));
 
     // Save fallback invoice
     const savedInvoices = getFallbackInvoices();
     savedInvoices.unshift(invoice);
-    localStorage.setItem('billease_invoices', JSON.stringify(savedInvoices));
+    localStorage.setItem("billease_invoices", JSON.stringify(savedInvoices));
 
     return invoice;
   },
@@ -453,42 +658,56 @@ export const apiClient = {
   async listInvoices(
     tenantId: string,
     token: string,
-    params?: InvoiceFilterParams
+    params?: InvoiceFilterParams,
   ): Promise<PagedResponse<Invoice>> {
     const filter = params || {};
     const queryParts: string[] = [];
     if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
-    if (filter.paymentMode) queryParts.push(`paymentMode=${encodeURIComponent(filter.paymentMode)}`);
-    if (filter.paymentStatus) queryParts.push(`paymentStatus=${encodeURIComponent(filter.paymentStatus)}`);
+    if (filter.paymentMode)
+      queryParts.push(`paymentMode=${encodeURIComponent(filter.paymentMode)}`);
+    if (filter.paymentStatus)
+      queryParts.push(
+        `paymentStatus=${encodeURIComponent(filter.paymentStatus)}`,
+      );
     if (filter.page) queryParts.push(`page=${filter.page}`);
     if (filter.limit) queryParts.push(`limit=${filter.limit}`);
-    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    const qs = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
 
     const cacheKey = `invoices:${tenantId}:${qs}`;
     return apiCache.fetchWithCache(
       cacheKey,
       async () => {
         try {
-          const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices${qs}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+          const res = await fetch(
+            `${API_BASE}/tenants/${tenantId}/invoices${qs}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (res.ok) return (await res.json()) as PagedResponse<Invoice>;
         } catch (_) {}
         const allInvs = getFallbackInvoices();
         let filtered = allInvs;
         if (filter.q) {
           const qLower = filter.q.toLowerCase();
-          filtered = filtered.filter(i =>
-            i.invoiceNumber.toLowerCase().includes(qLower) ||
-            (i.customerName && i.customerName.toLowerCase().includes(qLower)) ||
-            (i.customerPhone && i.customerPhone.toLowerCase().includes(qLower))
+          filtered = filtered.filter(
+            (i) =>
+              i.invoiceNumber.toLowerCase().includes(qLower) ||
+              (i.customerName &&
+                i.customerName.toLowerCase().includes(qLower)) ||
+              (i.customerPhone &&
+                i.customerPhone.toLowerCase().includes(qLower)),
           );
         }
         if (filter.paymentMode) {
-          filtered = filtered.filter(i => i.paymentMode === filter.paymentMode);
+          filtered = filtered.filter(
+            (i) => i.paymentMode === filter.paymentMode,
+          );
         }
         if (filter.paymentStatus) {
-          filtered = filtered.filter(i => (i.paymentStatus || 'COMPLETED') === filter.paymentStatus);
+          filtered = filtered.filter(
+            (i) => (i.paymentStatus || "COMPLETED") === filter.paymentStatus,
+          );
         }
         const page = filter.page || 1;
         const limit = filter.limit || 50;
@@ -498,30 +717,58 @@ export const apiClient = {
         const items = filtered.slice(start, start + limit);
         return { items, total, page, limit, totalPages };
       },
-      { ttlMs: 60_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+      {
+        ttlMs: 60_000,
+        forceRefresh: filter.forceRefresh,
+        staleWhileRevalidate: true,
+      },
     );
   },
 
-  async getSalesOverview(tenantId: string, token: string, forceRefresh = false): Promise<SalesOverview> {
+  async getSalesOverview(
+    tenantId: string,
+    token: string,
+    forceRefresh = false,
+  ): Promise<SalesOverview> {
     const cacheKey = `sales:overview:${tenantId}`;
     return apiCache.fetchWithCache(
       cacheKey,
       async () => {
         try {
-          const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/overview`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+          const res = await fetch(
+            `${API_BASE}/tenants/${tenantId}/sales/overview`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (res.ok) return (await res.json()) as SalesOverview;
         } catch (_) {}
         const invs = getFallbackInvoices();
-        const completed = invs.filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
-        const pending = invs.filter(i => i.paymentStatus === 'PENDING');
-        const totalSales = completed.reduce((sum, inv) => sum + inv.grandTotal, 0);
-        const totalItems = completed.reduce((sum, inv) => sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0), 0);
-        const cash = completed.filter(i => i.paymentMode === 'CASH').reduce((s, i) => s + i.grandTotal, 0);
-        const upi = completed.filter(i => i.paymentMode === 'UPI').reduce((s, i) => s + i.grandTotal, 0);
-        const khata = completed.filter(i => i.paymentMode === 'CREDIT_KHATA').reduce((s, i) => s + i.grandTotal, 0);
-        const card = completed.filter(i => i.paymentMode === 'CARD').reduce((s, i) => s + i.grandTotal, 0);
+        const completed = invs.filter(
+          (i) => (i.paymentStatus || "COMPLETED") === "COMPLETED",
+        );
+        const pending = invs.filter((i) => i.paymentStatus === "PENDING");
+        const totalSales = completed.reduce(
+          (sum, inv) => sum + inv.grandTotal,
+          0,
+        );
+        const totalItems = completed.reduce(
+          (sum, inv) =>
+            sum + (inv.items?.reduce((s, it) => s + it.quantity, 0) || 0),
+          0,
+        );
+        const cash = completed
+          .filter((i) => i.paymentMode === "CASH")
+          .reduce((s, i) => s + i.grandTotal, 0);
+        const upi = completed
+          .filter((i) => i.paymentMode === "UPI")
+          .reduce((s, i) => s + i.grandTotal, 0);
+        const khata = completed
+          .filter((i) => i.paymentMode === "CREDIT_KHATA")
+          .reduce((s, i) => s + i.grandTotal, 0);
+        const card = completed
+          .filter((i) => i.paymentMode === "CARD")
+          .reduce((s, i) => s + i.grandTotal, 0);
         return {
           totalSales,
           totalInvoices: completed.length,
@@ -532,40 +779,53 @@ export const apiClient = {
           cardSales: card,
           splitSales: 0,
           pendingSales: pending.reduce((sum, inv) => sum + inv.grandTotal, 0),
-          pendingInvoices: pending.length
+          pendingInvoices: pending.length,
         };
       },
-      { ttlMs: 30_000, forceRefresh, staleWhileRevalidate: true }
+      { ttlMs: 30_000, forceRefresh, staleWhileRevalidate: true },
     );
   },
 
   async getSoldItems(
     tenantId: string,
     token: string,
-    params?: SoldItemFilterParams
+    params?: SoldItemFilterParams,
   ): Promise<PagedResponse<SoldItemStats>> {
     const filter = params || {};
     const queryParts: string[] = [];
     if (filter.q) queryParts.push(`q=${encodeURIComponent(filter.q)}`);
     if (filter.page) queryParts.push(`page=${filter.page}`);
     if (filter.limit) queryParts.push(`limit=${filter.limit}`);
-    const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+    const qs = queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
 
     const cacheKey = `sold-items:${tenantId}:${qs}`;
     return apiCache.fetchWithCache(
       cacheKey,
       async () => {
         try {
-          const res = await fetch(`${API_BASE}/tenants/${tenantId}/sales/sold-items${qs}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
+          const res = await fetch(
+            `${API_BASE}/tenants/${tenantId}/sales/sold-items${qs}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          );
           if (res.ok) return (await res.json()) as PagedResponse<SoldItemStats>;
         } catch (_) {}
-        const invs = getFallbackInvoices().filter(i => (i.paymentStatus || 'COMPLETED') === 'COMPLETED');
-        const itemMap = new Map<string, { qty: number; revenue: number; prices: number[]; count: number }>();
-        invs.forEach(inv => {
-          inv.items?.forEach(it => {
-            const existing = itemMap.get(it.productName) || { qty: 0, revenue: 0, prices: [], count: 0 };
+        const invs = getFallbackInvoices().filter(
+          (i) => (i.paymentStatus || "COMPLETED") === "COMPLETED",
+        );
+        const itemMap = new Map<
+          string,
+          { qty: number; revenue: number; prices: number[]; count: number }
+        >();
+        invs.forEach((inv) => {
+          inv.items?.forEach((it) => {
+            const existing = itemMap.get(it.productName) || {
+              qty: 0,
+              revenue: 0,
+              prices: [],
+              count: 0,
+            };
             existing.qty += it.quantity;
             existing.revenue += it.totalAmount;
             existing.prices.push(it.unitPrice);
@@ -573,17 +833,24 @@ export const apiClient = {
             itemMap.set(it.productName, existing);
           });
         });
-        let list = Array.from(itemMap.entries()).map(([productName, data]) => ({
-          productName,
-          totalQuantity: data.qty,
-          totalRevenue: data.revenue,
-          avgPrice: data.prices.length > 0 ? (data.prices.reduce((a, b) => a + b, 0) / data.prices.length) : 0,
-          ordersCount: data.count
-        })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+        let list = Array.from(itemMap.entries())
+          .map(([productName, data]) => ({
+            productName,
+            totalQuantity: data.qty,
+            totalRevenue: data.revenue,
+            avgPrice:
+              data.prices.length > 0
+                ? data.prices.reduce((a, b) => a + b, 0) / data.prices.length
+                : 0,
+            ordersCount: data.count,
+          }))
+          .sort((a, b) => b.totalRevenue - a.totalRevenue);
 
         if (filter.q) {
           const qLower = filter.q.toLowerCase();
-          list = list.filter(item => item.productName.toLowerCase().includes(qLower));
+          list = list.filter((item) =>
+            item.productName.toLowerCase().includes(qLower),
+          );
         }
         const page = filter.page || 1;
         const limit = filter.limit || 50;
@@ -593,7 +860,11 @@ export const apiClient = {
         const items = list.slice(start, start + limit);
         return { items, total, page, limit, totalPages };
       },
-      { ttlMs: 60_000, forceRefresh: filter.forceRefresh, staleWhileRevalidate: true }
+      {
+        ttlMs: 60_000,
+        forceRefresh: filter.forceRefresh,
+        staleWhileRevalidate: true,
+      },
     );
   },
 
@@ -601,33 +872,36 @@ export const apiClient = {
     tenantId: string,
     invoiceId: string,
     token: string,
-    payload: UpdatePaymentStatusInput
+    payload: UpdatePaymentStatusInput,
   ): Promise<Invoice | null> {
-    apiCache.invalidate('invoices:');
-    apiCache.invalidate('sales:');
-    apiCache.invalidate('sold-items:');
-    apiCache.invalidate('customers:');
+    apiCache.invalidate("invoices:");
+    apiCache.invalidate("sales:");
+    apiCache.invalidate("sold-items:");
+    apiCache.invalidate("customers:");
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/payment-status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/payment-status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload)
-      });
+      );
       if (res.ok) return (await res.json()) as Invoice | null;
     } catch (_) {}
     const invs = getFallbackInvoices();
-    const idx = invs.findIndex(i => i.id === invoiceId);
+    const idx = invs.findIndex((i) => i.id === invoiceId);
     if (idx >= 0) {
       invs[idx] = {
         ...invs[idx],
         paymentStatus: payload.paymentStatus,
         paymentMode: payload.paymentMode || invs[idx].paymentMode,
-        notes: payload.notes || invs[idx].notes
+        notes: payload.notes || invs[idx].notes,
       };
-      localStorage.setItem('billease_invoices', JSON.stringify(invs));
+      localStorage.setItem("billease_invoices", JSON.stringify(invs));
       return invs[idx];
     }
     return null;
@@ -638,27 +912,32 @@ export const apiClient = {
     invoiceId: string,
     token: string,
     phone: string,
-    customMessage?: string
+    customMessage?: string,
   ): Promise<SendWhatsappBillResponse> {
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/whatsapp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/whatsapp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ phone, customMessage }),
         },
-        body: JSON.stringify({ phone, customMessage })
-      });
+      );
       if (res.ok) return (await res.json()) as SendWhatsappBillResponse;
     } catch (_) {}
-    const clean = phone.replace(/[^0-9]/g, '');
+    const clean = phone.replace(/[^0-9]/g, "");
     const target = clean.length === 10 ? `91${clean}` : clean;
     const pdfUrl = `${window.location.protocol}//${window.location.hostname}:8081/api/public/invoices/${invoiceId}/pdf`;
-    const msg = customMessage || `🧾 *Bill copy from Billease* for invoice #${invoiceId}\n\n📄 *Download PDF Bill:* ${pdfUrl}`;
+    const msg =
+      customMessage ||
+      `🧾 *Bill copy from Billease* for invoice #${invoiceId}\n\n📄 *Download PDF Bill:* ${pdfUrl}`;
     return {
       sent: true,
       whatsappUrl: `https://wa.me/${target}?text=${encodeURIComponent(msg)}`,
-      message: `WhatsApp link ready for +${target}`
+      message: `WhatsApp link ready for +${target}`,
     };
   },
 
@@ -670,15 +949,23 @@ export const apiClient = {
     return `${API_BASE}/public/invoices/${invoiceId}/pdf`;
   },
 
-  async downloadInvoicePdf(tenantId: string, invoiceId: string, token: string, invoiceNumber: string): Promise<void> {
+  async downloadInvoicePdf(
+    tenantId: string,
+    invoiceId: string,
+    token: string,
+    invoiceNumber: string,
+  ): Promise<void> {
     try {
-      const res = await fetch(`${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/pdf`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(
+        `${API_BASE}/tenants/${tenantId}/invoices/${invoiceId}/pdf`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        const a = document.createElement("a");
         a.href = url;
         a.download = `Bill_${invoiceNumber}.pdf`;
         document.body.appendChild(a);
@@ -688,7 +975,7 @@ export const apiClient = {
         return;
       }
     } catch (_) {}
-    const inv = getFallbackInvoices().find(i => i.id === invoiceId);
+    const inv = getFallbackInvoices().find((i) => i.id === invoiceId);
     if (inv) {
       const tenant = getFallbackTenant();
       downloadInvoicePdfLocally(inv, {
@@ -700,191 +987,282 @@ export const apiClient = {
         hasGst: tenant.hasGst,
       });
     }
-  }
+  },
 };
 
 function getFallbackInvoices(): Invoice[] {
-  const saved = localStorage.getItem('billease_invoices');
+  const saved = localStorage.getItem("billease_invoices");
   if (saved) return JSON.parse(saved) as Invoice[];
   return [];
 }
 
 // Fallback seed data
 function getFallbackTenant(): Tenant {
-  const saved = localStorage.getItem('billease_tenant');
+  const saved = localStorage.getItem("billease_tenant");
   if (saved) return JSON.parse(saved) as Tenant;
   return {
-    id: 'a0000000-0000-0000-0000-000000000001',
-    slug: 'shree-ganesh-supermarket',
-    name: 'Shree Ganesh Supermarket',
-    legalName: 'Shree Ganesh Retail Enterprises LLP',
-    phone: '+91 98765 43210',
-    email: 'contact@shreeganeshstore.com',
-    address: 'Shop 4, MG Road, Shivaji Nagar',
-    city: 'Pune',
-    stateCode: '27',
+    id: "a0000000-0000-0000-0000-000000000001",
+    slug: "shree-ganesh-supermarket",
+    name: "Shree Ganesh Supermarket",
+    legalName: "Shree Ganesh Retail Enterprises LLP",
+    phone: "+91 98765 43210",
+    email: "contact@shreeganeshstore.com",
+    address: "Shop 4, MG Road, Shivaji Nagar",
+    city: "Pune",
+    stateCode: "27",
     hasGst: true,
-    gstin: '27ABCDE1234F1Z5',
+    gstin: "27ABCDE1234F1Z5",
     isCompositionScheme: false,
-    logoUrl: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=120&h=120&fit=crop',
-    bannerUrl: 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1200&h=300&fit=crop',
-    invoicePrefix: 'SGS',
-    invoiceFooter: 'Thank you for shopping with us! Visit again.',
+    logoUrl:
+      "https://images.unsplash.com/photo-1578916171728-46686eac8d58?w=120&h=120&fit=crop",
+    bannerUrl:
+      "https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=1200&h=300&fit=crop",
+    invoicePrefix: "SGS",
+    invoiceFooter: "Thank you for shopping with us! Visit again.",
     thermalWidthMm: 80,
-    upiVpa: 'shreeganesh@upi',
-    upiPayeeName: 'Shree Ganesh Supermarket',
+    upiVpa: "shreeganesh@upi",
+    upiPayeeName: "Shree Ganesh Supermarket",
     loyaltyPointsPer100: 1,
     loyaltyPointValueRs: 1,
-    isActive: true
+    isActive: true,
   };
 }
 
 function getFallbackProducts(query?: string): Product[] {
-  const saved = localStorage.getItem('billease_products');
-  let prods: Product[] = saved ? (JSON.parse(saved) as Product[]) : [
-    {
-      id: 'd0000000-0000-0000-0000-000000000001',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Parle-G Glucose Biscuit 100g',
-      barcode: '8901719101014',
-      sku: 'BIS-001',
-      unit: 'PACK',
-      hsnCode: '19053100',
-      gstRate: 18,
-      isPriceTaxInclusive: true,
-      minStockAlert: 10,
-      isActive: true,
-      currentStock: 48,
-      mrp: 10.00,
-      sellingPrice: 10.00
-    },
-    {
-      id: 'd0000000-0000-0000-0000-000000000002',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Tata Tea Gold 250g',
-      barcode: '8901052002345',
-      sku: 'BEV-001',
-      unit: 'PACK',
-      hsnCode: '09024020',
-      gstRate: 5,
-      isPriceTaxInclusive: true,
-      minStockAlert: 5,
-      isActive: true,
-      currentStock: 18,
-      mrp: 150.00,
-      sellingPrice: 140.00
-    },
-    {
-      id: 'd0000000-0000-0000-0000-000000000003',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Aashirvaad Shuddh Chakki Atta 5kg',
-      barcode: '8901725121019',
-      sku: 'GRC-001',
-      unit: 'PACK',
-      hsnCode: '11010000',
-      gstRate: 5,
-      isPriceTaxInclusive: true,
-      minStockAlert: 8,
-      isActive: true,
-      currentStock: 12,
-      mrp: 260.00,
-      sellingPrice: 245.00
-    },
-    {
-      id: 'd0000000-0000-0000-0000-000000000004',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Dettol Original Soap 75g (Buy 3 Get 1)',
-      barcode: '8901396312450',
-      sku: 'HYG-001',
-      unit: 'PACK',
-      hsnCode: '34011110',
-      gstRate: 18,
-      isPriceTaxInclusive: true,
-      minStockAlert: 6,
-      isActive: true,
-      currentStock: 22,
-      mrp: 120.00,
-      sellingPrice: 110.00
-    },
-    {
-      id: 'd0000000-0000-0000-0000-000000000005',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Tata Salt Vacuum Evaporated 1kg',
-      barcode: '8901015000124',
-      sku: 'GRC-002',
-      unit: 'PACK',
-      hsnCode: '25010010',
-      gstRate: 0,
-      isPriceTaxInclusive: true,
-      minStockAlert: 15,
-      isActive: true,
-      currentStock: 35,
-      mrp: 28.00,
-      sellingPrice: 28.00
-    }
-  ];
+  const saved = localStorage.getItem("billease_products");
+  let prods: Product[] = saved
+    ? (JSON.parse(saved) as Product[])
+    : [
+        {
+          id: "d0000000-0000-0000-0000-000000000001",
+          tenantId: "a0000000-0000-0000-0000-000000000001",
+          name: "Parle-G Glucose Biscuit 100g",
+          barcode: "8901719101014",
+          sku: "BIS-001",
+          unit: "PACK",
+          hsnCode: "19053100",
+          gstRate: 18,
+          isPriceTaxInclusive: true,
+          minStockAlert: 10,
+          isActive: true,
+          currentStock: 48,
+          mrp: 10.0,
+          sellingPrice: 10.0,
+        },
+        {
+          id: "d0000000-0000-0000-0000-000000000002",
+          tenantId: "a0000000-0000-0000-0000-000000000001",
+          name: "Tata Tea Gold 250g",
+          barcode: "8901052002345",
+          sku: "BEV-001",
+          unit: "PACK",
+          hsnCode: "09024020",
+          gstRate: 5,
+          isPriceTaxInclusive: true,
+          minStockAlert: 5,
+          isActive: true,
+          currentStock: 18,
+          mrp: 150.0,
+          sellingPrice: 140.0,
+        },
+        {
+          id: "d0000000-0000-0000-0000-000000000003",
+          tenantId: "a0000000-0000-0000-0000-000000000001",
+          name: "Aashirvaad Shuddh Chakki Atta 5kg",
+          barcode: "8901725121019",
+          sku: "GRC-001",
+          unit: "PACK",
+          hsnCode: "11010000",
+          gstRate: 5,
+          isPriceTaxInclusive: true,
+          minStockAlert: 8,
+          isActive: true,
+          currentStock: 12,
+          mrp: 260.0,
+          sellingPrice: 245.0,
+        },
+        {
+          id: "d0000000-0000-0000-0000-000000000004",
+          tenantId: "a0000000-0000-0000-0000-000000000001",
+          name: "Dettol Original Soap 75g (Buy 3 Get 1)",
+          barcode: "8901396312450",
+          sku: "HYG-001",
+          unit: "PACK",
+          hsnCode: "34011110",
+          gstRate: 18,
+          isPriceTaxInclusive: true,
+          minStockAlert: 6,
+          isActive: true,
+          currentStock: 22,
+          mrp: 120.0,
+          sellingPrice: 110.0,
+        },
+        {
+          id: "d0000000-0000-0000-0000-000000000005",
+          tenantId: "a0000000-0000-0000-0000-000000000001",
+          name: "Tata Salt Vacuum Evaporated 1kg",
+          barcode: "8901015000124",
+          sku: "GRC-002",
+          unit: "PACK",
+          hsnCode: "25010010",
+          gstRate: 0,
+          isPriceTaxInclusive: true,
+          minStockAlert: 15,
+          isActive: true,
+          currentStock: 35,
+          mrp: 28.0,
+          sellingPrice: 28.0,
+        },
+      ];
 
   if (query && query.trim()) {
     const q = query.toLowerCase().trim();
-    return prods.filter(p => p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)));
+    return prods.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.barcode && p.barcode.includes(q)),
+    );
   }
   return prods;
 }
 
 function getFallbackCustomers(): Customer[] {
-  const saved = localStorage.getItem('billease_customers');
+  const saved = localStorage.getItem("billease_customers");
   if (saved) return JSON.parse(saved) as Customer[];
   return [
     {
-      id: 'f0000000-0000-0000-0000-000000000001',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Ramesh Bhai Shinde',
-      phone: '+91 98220 12345',
-      address: 'Flat 102, Shanti Heights',
+      id: "f0000000-0000-0000-0000-000000000001",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      name: "Ramesh Bhai Shinde",
+      phone: "+91 98220 12345",
+      address: "Flat 102, Shanti Heights",
       creditLimit: 5000,
       currentDue: 1250,
-      loyaltyPoints: 45
+      loyaltyPoints: 45,
     },
     {
-      id: 'f0000000-0000-0000-0000-000000000002',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      name: 'Pooja Sharma',
-      phone: '+91 97654 32109',
-      address: 'B-14, Laxmi Park',
+      id: "f0000000-0000-0000-0000-000000000002",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      name: "Pooja Sharma",
+      phone: "+91 97654 32109",
+      address: "B-14, Laxmi Park",
       creditLimit: 3000,
       currentDue: 0,
-      loyaltyPoints: 120
-    }
+      loyaltyPoints: 120,
+    },
+  ];
+}
+
+function getFallbackTenants(): Tenant[] {
+  const current = getFallbackTenant();
+  return [
+    current,
+    {
+      id: "a0000000-0000-0000-0000-000000000002",
+      slug: "laxmi-kirana-general-store",
+      name: "Laxmi Kirana & General Store",
+      legalName: "Laxmi Retailers Pvt Ltd",
+      phone: "+91 98230 45678",
+      email: "laxmi.store@gmail.com",
+      city: "Nagpur",
+      stateCode: "27",
+      hasGst: false,
+      isCompositionScheme: true,
+      invoicePrefix: "LKG",
+      invoiceFooter: "Dhanyawad! Phir aaiye.",
+      thermalWidthMm: 58,
+      upiVpa: "laxmikirana@paytm",
+      upiPayeeName: "Laxmi Kirana",
+      loyaltyPointsPer100: 1,
+      loyaltyPointValueRs: 1,
+      isActive: true,
+    },
+    {
+      id: "a0000000-0000-0000-0000-000000000003",
+      slug: "apollo-wellness-pharma",
+      name: "Janata Medico & Pharma",
+      legalName: "Janata Drug Agency",
+      phone: "+91 99887 65432",
+      email: "janatamedico@pharma.in",
+      city: "Indore",
+      stateCode: "23",
+      hasGst: true,
+      gstin: "23AABCT1234D1Z2",
+      isCompositionScheme: false,
+      invoicePrefix: "JMP",
+      invoiceFooter: "Get well soon. No return without bill.",
+      thermalWidthMm: 80,
+      upiVpa: "janatamedico@icici",
+      upiPayeeName: "Janata Medico",
+      loyaltyPointsPer100: 2,
+      loyaltyPointValueRs: 1,
+      isActive: false,
+    },
+  ];
+}
+
+function getFallbackUsers(tenantId: string): User[] {
+  return [
+    {
+      id: "u0000000-0000-0000-0000-000000000001",
+      tenantId,
+      username: "ganesh_owner",
+      fullName: "Ganesh Shankar",
+      email: "ganesh@billease.in",
+      phone: "+91 98220 12345",
+      role: "STORE_ADMIN",
+      isActive: true,
+    },
+    {
+      id: "u0000000-0000-0000-0000-000000000002",
+      tenantId,
+      username: "rahul_cashier",
+      fullName: "Rahul Varma (Morning Counter)",
+      email: "rahul@billease.in",
+      phone: "+91 98220 99991",
+      role: "CASHIER",
+      isActive: true,
+    },
+    {
+      id: "u0000000-0000-0000-0000-000000000003",
+      tenantId,
+      username: "priya_cashier",
+      fullName: "Priya Nair (Evening Counter)",
+      email: "priya@billease.in",
+      phone: "+91 98220 99992",
+      role: "CASHIER",
+      isActive: false,
+    },
   ];
 }
 
 function getFallbackCoupons(): Coupon[] {
-  const saved = localStorage.getItem('billease_coupons');
+  const saved = localStorage.getItem("billease_coupons");
   if (saved) return JSON.parse(saved) as Coupon[];
   return [
     {
-      id: '10000000-0000-0000-0000-000000000001',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      code: 'DIWALI50',
-      discountType: 'FLAT',
+      id: "10000000-0000-0000-0000-000000000001",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      code: "DIWALI50",
+      discountType: "FLAT",
       discountValue: 50,
       minOrderAmount: 500,
       maxDiscountCap: 50,
       usageCount: 14,
       maxUsage: 1000,
-      isActive: true
+      isActive: true,
     },
     {
-      id: '10000000-0000-0000-0000-000000000002',
-      tenantId: 'a0000000-0000-0000-0000-000000000001',
-      code: 'SAVE10',
-      discountType: 'PERCENTAGE',
+      id: "10000000-0000-0000-0000-000000000002",
+      tenantId: "a0000000-0000-0000-0000-000000000001",
+      code: "SAVE10",
+      discountType: "PERCENTAGE",
       discountValue: 10,
       minOrderAmount: 300,
       maxDiscountCap: 100,
       usageCount: 32,
       maxUsage: 500,
-      isActive: true
-    }
+      isActive: true,
+    },
   ];
 }
