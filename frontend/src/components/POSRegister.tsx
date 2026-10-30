@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Product, Customer, CartItem, PaymentMode, PaymentStatus, Invoice } from '../types';
 import { apiClient } from '../api/client';
 import { PaymentProcessModal } from './PaymentProcessModal';
-import { Search, Plus, Minus, Trash2, QrCode, Banknote, CreditCard, BookOpen, Award, UserCheck, MessageCircle } from 'lucide-solid';
+import { Search, Plus, Minus, Trash2, QrCode, Banknote, CreditCard, BookOpen, Award, UserCheck, MessageCircle, Loader2 } from 'lucide-solid';
 
 interface POSRegisterProps {
   onBillGenerated: (invoice: Invoice) => void;
@@ -15,6 +15,7 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
 
   const [products, setProducts] = createSignal<Product[]>([]);
   const [customers, setCustomers] = createSignal<Customer[]>([]);
+  const [loading, setLoading] = createSignal(true);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [cart, setCart] = createSignal<CartItem[]>([]);
   
@@ -47,12 +48,17 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
   const loadData = async () => {
     const t = tenant();
     if (!t) return;
-    const [pRes, cRes] = await Promise.all([
-      apiClient.listProducts(t.id, { limit: 500 }),
-      apiClient.listCustomers(t.id, token(), { limit: 500 })
-    ]);
-    setProducts(pRes.items);
-    setCustomers(cRes.items);
+    setLoading(true);
+    try {
+      const [pRes, cRes] = await Promise.all([
+        apiClient.listProducts(t.id, { limit: 500 }),
+        apiClient.listCustomers(t.id, token(), { limit: 500 })
+      ]);
+      setProducts(pRes.items);
+      setCustomers(cRes.items);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openPaymentConfirmation = (mode: PaymentMode) => {
@@ -279,8 +285,11 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
                   addToCart(filteredProducts()[0]);
                 }
               }}
-              class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+              class="w-full pl-10 pr-9 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
             />
+            <Show when={loading()}>
+              <Loader2 class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 animate-spin" />
+            </Show>
           </div>
           <button
             onClick={() => {
@@ -303,46 +312,63 @@ export const POSRegister: Component<POSRegisterProps> = (props) => {
           </div>
 
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto pr-1">
-            <For each={filteredProducts()}>
-              {(prod) => (
-                <div
-                  onClick={() => addToCart(prod)}
-                  class="p-3 rounded-lg border border-slate-200 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer bg-slate-50 hover:bg-white flex flex-col justify-between"
-                >
-                  <div>
-                    <div class="flex items-start justify-between gap-1">
-                      <span class="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
-                        {prod.name}
-                      </span>
-                    </div>
-                    <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      <span>Stock: {prod.currentStock} {prod.unit}</span>
-                      <Show when={prod.gstRate > 0}>
-                        <span class="bg-slate-200 text-slate-700 px-1 rounded text-[10px]">
-                          {prod.gstRate}% GST
-                        </span>
-                      </Show>
-                    </div>
-                  </div>
-
-                  <div class="mt-3 flex items-baseline justify-between">
+            <Show when={loading()} fallback={
+              <For each={filteredProducts()}>
+                {(prod) => (
+                  <div
+                    onClick={() => addToCart(prod)}
+                    class="p-3 rounded-lg border border-slate-200 hover:border-emerald-500 hover:shadow-xs transition-all cursor-pointer bg-slate-50 hover:bg-white flex flex-col justify-between"
+                  >
                     <div>
-                      <span class="text-base font-extrabold text-emerald-700">
-                        ₹{prod.sellingPrice.toFixed(2)}
-                      </span>
-                      <Show when={prod.mrp > prod.sellingPrice}>
-                        <span class="ml-1 text-xs text-slate-400 line-through">
-                          ₹{prod.mrp.toFixed(2)}
+                      <div class="flex items-start justify-between gap-1">
+                        <span class="font-bold text-slate-900 text-sm leading-snug line-clamp-2">
+                          {prod.name}
                         </span>
-                      </Show>
+                      </div>
+                      <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                        <span>Stock: {prod.currentStock} {prod.unit}</span>
+                        <Show when={prod.gstRate > 0}>
+                          <span class="bg-slate-200 text-slate-700 px-1 rounded text-[10px]">
+                            {prod.gstRate}% GST
+                          </span>
+                        </Show>
+                      </div>
                     </div>
-                    <button class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors">
-                      <Plus class="w-4 h-4" />
-                    </button>
+
+                    <div class="mt-3 flex items-baseline justify-between">
+                      <div>
+                        <span class="text-base font-extrabold text-emerald-700">
+                          ₹{prod.sellingPrice.toFixed(2)}
+                        </span>
+                        <Show when={prod.mrp > prod.sellingPrice}>
+                          <span class="ml-1 text-xs text-slate-400 line-through">
+                            ₹{prod.mrp.toFixed(2)}
+                          </span>
+                        </Show>
+                      </div>
+                      <button class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors">
+                        <Plus class="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </For>
+                )}
+              </For>
+            }>
+              <For each={Array.from({ length: 6 })}>
+                {() => (
+                  <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 animate-pulse flex flex-col justify-between h-28">
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200 rounded w-3/4" />
+                      <div class="h-3 bg-slate-200/60 rounded w-1/2" />
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                      <div class="h-5 bg-slate-200 rounded w-16" />
+                      <div class="w-7 h-7 bg-slate-200 rounded-full" />
+                    </div>
+                  </div>
+                )}
+              </For>
+            </Show>
           </div>
         </div>
 

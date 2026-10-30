@@ -2,12 +2,14 @@ import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
 import { Customer } from '../types';
 import { apiClient } from '../api/client';
-import { BookOpen, Plus, Search, MessageCircle, ArrowDownLeft, Award, UserPlus } from 'lucide-solid';
+import { BookOpen, Plus, Search, MessageCircle, ArrowDownLeft, Award, UserPlus, Loader2 } from 'lucide-solid';
+import { ListItemSkeleton } from './LoadingSkeleton';
 
 export const CustomerKhata: Component = () => {
   const { tenant, token } = useAuth();
 
   const [customers, setCustomers] = createSignal<Customer[]>([]);
+  const [loading, setLoading] = createSignal(true);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [page, setPage] = createSignal(1);
   const [pageSize, setPageSize] = createSignal(15);
@@ -28,14 +30,19 @@ export const CustomerKhata: Component = () => {
   const loadCustomers = async () => {
     const t = tenant();
     if (!t) return;
-    const res = await apiClient.listCustomers(t.id, token(), {
-      q: searchQuery().trim() || undefined,
-      page: page(),
-      limit: pageSize()
-    });
-    setCustomers(res.items);
-    setTotalItems(res.total);
-    setTotalPages(res.totalPages);
+    setLoading(true);
+    try {
+      const res = await apiClient.listCustomers(t.id, token(), {
+        q: searchQuery().trim() || undefined,
+        page: page(),
+        limit: pageSize()
+      });
+      setCustomers(res.items);
+      setTotalItems(res.total);
+      setTotalPages(res.totalPages);
+    } finally {
+      setLoading(false);
+    }
   };
 
   onMount(() => loadCustomers());
@@ -155,17 +162,21 @@ export const CustomerKhata: Component = () => {
               placeholder="Search by name or mobile..."
               value={searchQuery()}
               onInput={(e) => handleSearchInput(e.currentTarget.value)}
-              class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
+              class="w-full pl-9 pr-8 py-1.5 rounded-lg border border-slate-200 text-xs font-medium focus:ring-2 focus:ring-emerald-500"
             />
+            <Show when={loading()}>
+              <Loader2 class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 animate-spin" />
+            </Show>
           </div>
         </div>
 
-        <div class="divide-y divide-slate-100">
-          <Show when={filteredCustomers().length === 0}>
-            <div class="p-8 text-center text-slate-400 text-xs">
-              No customers found. Add your first customer using the button above.
-            </div>
-          </Show>
+        <Show when={loading()} fallback={
+          <div class="divide-y divide-slate-100">
+            <Show when={filteredCustomers().length === 0}>
+              <div class="p-8 text-center text-slate-400 text-xs">
+                No customers found. Add your first customer using the button above.
+              </div>
+            </Show>
 
           <For each={filteredCustomers()}>
             {(cust) => {
@@ -226,6 +237,9 @@ export const CustomerKhata: Component = () => {
             }}
           </For>
         </div>
+      }>
+        <ListItemSkeleton count={pageSize()} />
+      </Show>
 
         {/* Pagination Bar */}
         <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
