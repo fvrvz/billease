@@ -16,8 +16,10 @@ import {
   BookOpen,
   RefreshCw,
   CheckCircle,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-solid';
+import { TableSkeleton, CardSkeleton } from './LoadingSkeleton';
 
 interface SalesLedgerProps {
   onSelectInvoice: (invoice: Invoice) => void;
@@ -195,92 +197,98 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
       </div>
 
       {/* KPI Overview Cards */}
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        
-        {/* Total Revenue */}
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Sales</span>
-            <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              ₹
+      <Show when={loading() && overview().totalInvoices === 0} fallback={
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          
+          {/* Total Revenue */}
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Sales</span>
+              <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                ₹
+              </div>
             </div>
+            <div class="text-2xl font-black text-slate-900">
+              ₹{overview().totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p class="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+              <TrendingUp class="w-3.5 h-3.5" /> All-time completed revenue
+            </p>
           </div>
-          <div class="text-2xl font-black text-slate-900">
-            ₹{overview().totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <p class="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
-            <TrendingUp class="w-3.5 h-3.5" /> All-time completed revenue
-          </p>
-        </div>
 
-        {/* Pending Payments / Unpaid Bills */}
-        <div class="bg-amber-50/60 p-5 rounded-2xl border border-amber-200/80 shadow-xs">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Pending Bills</span>
-            <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-              <Clock class="w-4 h-4" />
+          {/* Pending Payments / Unpaid Bills */}
+          <div class="bg-amber-50/60 p-5 rounded-2xl border border-amber-200/80 shadow-xs">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-amber-700 uppercase tracking-wider">Pending Bills</span>
+              <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Clock class="w-4 h-4" />
+              </div>
             </div>
+            <div class="text-2xl font-black text-amber-900">
+              ₹{overview().pendingSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <p class="text-[11px] text-amber-700 font-medium mt-1">
+              {overview().pendingInvoices} unpaid / pending bill{overview().pendingInvoices === 1 ? '' : 's'}
+            </p>
           </div>
-          <div class="text-2xl font-black text-amber-900">
-            ₹{overview().pendingSales.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <p class="text-[11px] text-amber-700 font-medium mt-1">
-            {overview().pendingInvoices} unpaid / pending bill{overview().pendingInvoices === 1 ? '' : 's'}
-          </p>
-        </div>
 
-        {/* Total Invoices */}
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed Bills</span>
-            <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Receipt class="w-4 h-4" />
+          {/* Total Invoices */}
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed Bills</span>
+              <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                <Receipt class="w-4 h-4" />
+              </div>
             </div>
+            <div class="text-2xl font-black text-slate-900">
+              {overview().totalInvoices}
+            </div>
+            <p class="text-[11px] text-slate-500 font-medium mt-1">
+              Paid transactions
+            </p>
           </div>
-          <div class="text-2xl font-black text-slate-900">
-            {overview().totalInvoices}
-          </div>
-          <p class="text-[11px] text-slate-500 font-medium mt-1">
-            Paid transactions
-          </p>
-        </div>
 
-        {/* Total Items Sold */}
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Items Sold</span>
-            <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
-              <Package class="w-4 h-4" />
+          {/* Total Items Sold */}
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Items Sold</span>
+              <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Package class="w-4 h-4" />
+              </div>
             </div>
+            <div class="text-2xl font-black text-slate-900">
+              {overview().totalItemsSold} <span class="text-sm font-semibold text-slate-400">units</span>
+            </div>
+            <p class="text-[11px] text-slate-500 font-medium mt-1">
+              Across completed bills
+            </p>
           </div>
-          <div class="text-2xl font-black text-slate-900">
-            {overview().totalItemsSold} <span class="text-sm font-semibold text-slate-400">units</span>
-          </div>
-          <p class="text-[11px] text-slate-500 font-medium mt-1">
-            Across completed bills
-          </p>
-        </div>
 
-        {/* Payment Modes Mini-Breakdown */}
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Completed Split</span>
-          <div class="space-y-1.5 text-xs font-semibold">
-            <div class="flex justify-between items-center text-emerald-800">
-              <span class="flex items-center gap-1"><Banknote class="w-3.5 h-3.5" /> Cash:</span>
-              <span>₹{overview().cashSales.toFixed(2)}</span>
-            </div>
-            <div class="flex justify-between items-center text-sky-800">
-              <span class="flex items-center gap-1"><QrCode class="w-3.5 h-3.5" /> UPI:</span>
-              <span>₹{overview().upiSales.toFixed(2)}</span>
-            </div>
-            <div class="flex justify-between items-center text-amber-800">
-              <span class="flex items-center gap-1"><BookOpen class="w-3.5 h-3.5" /> Khata:</span>
-              <span>₹{overview().khataSales.toFixed(2)}</span>
+          {/* Payment Modes Mini-Breakdown */}
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Completed Split</span>
+            <div class="space-y-1.5 text-xs font-semibold">
+              <div class="flex justify-between items-center text-emerald-800">
+                <span class="flex items-center gap-1"><Banknote class="w-3.5 h-3.5" /> Cash:</span>
+                <span>₹{overview().cashSales.toFixed(2)}</span>
+              </div>
+              <div class="flex justify-between items-center text-sky-800">
+                <span class="flex items-center gap-1"><QrCode class="w-3.5 h-3.5" /> UPI:</span>
+                <span>₹{overview().upiSales.toFixed(2)}</span>
+              </div>
+              <div class="flex justify-between items-center text-amber-800">
+                <span class="flex items-center gap-1"><BookOpen class="w-3.5 h-3.5" /> Khata:</span>
+                <span>₹{overview().khataSales.toFixed(2)}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-      </div>
+        </div>
+      }>
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <CardSkeleton count={5} />
+        </div>
+      </Show>
 
       {/* Main Tabs Container */}
       <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -323,8 +331,11 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                 placeholder={activeTab() === 'bills' ? 'Search by bill no, buyer, phone...' : 'Search sold product name...'}
                 value={searchQuery()}
                 onInput={(e) => handleSearchInput(e.currentTarget.value)}
-                class="w-full pl-9 pr-3 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                class="w-full pl-9 pr-8 py-2 bg-white rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
+              <Show when={loading()}>
+                <Loader2 class="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600 animate-spin" />
+              </Show>
             </div>
 
             <Show when={activeTab() === 'bills'}>
@@ -371,7 +382,8 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <For each={filteredInvoices()} fallback={
+                <Show when={loading()} fallback={
+                  <For each={filteredInvoices()} fallback={
                   <tr>
                     <td colspan="8" class="py-12 text-center text-slate-400">
                       <Receipt class="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -487,7 +499,10 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                     </tr>
                   )}
                 </For>
-              </tbody>
+              }>
+                <TableSkeleton cols={8} rows={invoicePageSize()} />
+              </Show>
+            </tbody>
             </table>
           </div>
 
@@ -548,7 +563,8 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <For each={filteredSoldItems()} fallback={
+                <Show when={loading()} fallback={
+                  <For each={filteredSoldItems()} fallback={
                   <tr>
                     <td colspan="6" class="py-12 text-center text-slate-400">
                       <Package class="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -595,7 +611,10 @@ export const SalesLedger: Component<SalesLedgerProps> = (props) => {
                     );
                   }}
                 </For>
-              </tbody>
+              }>
+                <TableSkeleton cols={6} rows={soldPageSize()} />
+              </Show>
+            </tbody>
             </table>
           </div>
 

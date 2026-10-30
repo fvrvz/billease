@@ -3,11 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { Coupon, DiscountType } from '../types';
 import { apiClient } from '../api/client';
 import { Tag, Plus, Award, Check, PowerOff, Sparkles, ToggleLeft, ToggleRight } from 'lucide-solid';
+import { ListItemSkeleton } from './LoadingSkeleton';
 
 export const CouponLoyalty: Component = () => {
   const { tenant, token, updateTenantData, isCashier } = useAuth();
 
   const [coupons, setCoupons] = createSignal<Coupon[]>([]);
+  const [loading, setLoading] = createSignal(true);
   const [showAddModal, setShowAddModal] = createSignal(false);
   const [togglingId, setTogglingId] = createSignal<string | null>(null);
 
@@ -27,10 +29,15 @@ export const CouponLoyalty: Component = () => {
   const loadCoupons = async () => {
     const t = tenant();
     if (!t) return;
-    const list = await apiClient.listCoupons(t.id, token());
-    setCoupons(list);
-    setPointsPer100(t.loyaltyPointsPer100);
-    setPointValueRs(t.loyaltyPointValueRs);
+    setLoading(true);
+    try {
+      const list = await apiClient.listCoupons(t.id, token());
+      setCoupons(list);
+      setPointsPer100(t.loyaltyPointsPer100);
+      setPointValueRs(t.loyaltyPointValueRs);
+    } finally {
+      setLoading(false);
+    }
   };
 
   onMount(() => loadCoupons());
@@ -174,33 +181,39 @@ export const CouponLoyalty: Component = () => {
           </div>
         </div>
 
-        <Show when={activeCoupons().length === 0}>
-          <div class="py-12 text-center">
-            <Tag class="w-10 h-10 text-slate-200 mx-auto mb-3" />
-            <p class="text-slate-500 text-sm">No active coupons</p>
-            <Show when={!isCashier()}>
-              <button
-                onClick={() => setShowAddModal(true)}
-                class="mt-3 text-emerald-600 hover:text-emerald-700 text-sm font-semibold"
-              >
-                + Create your first coupon
-              </button>
+        <Show when={loading()} fallback={
+          <>
+            <Show when={activeCoupons().length === 0}>
+              <div class="py-12 text-center">
+                <Tag class="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                <p class="text-slate-500 text-sm">No active coupons</p>
+                <Show when={!isCashier()}>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    class="mt-3 text-emerald-600 hover:text-emerald-700 text-sm font-semibold"
+                  >
+                    + Create your first coupon
+                  </button>
+                </Show>
+              </div>
             </Show>
-          </div>
-        </Show>
 
-        <div class="divide-y divide-slate-100">
-          <For each={activeCoupons()}>
-            {(coupon) => (
-              <CouponRow
-                coupon={coupon}
-                toggling={togglingId() === coupon.id}
-                canManage={!isCashier()}
-                onToggle={() => handleToggleCoupon(coupon)}
-              />
-            )}
-          </For>
-        </div>
+            <div class="divide-y divide-slate-100">
+              <For each={activeCoupons()}>
+                {(coupon) => (
+                  <CouponRow
+                    coupon={coupon}
+                    toggling={togglingId() === coupon.id}
+                    canManage={!isCashier()}
+                    onToggle={() => handleToggleCoupon(coupon)}
+                  />
+                )}
+              </For>
+            </div>
+          </>
+        }>
+          <ListItemSkeleton count={3} />
+        </Show>
       </div>
 
       {/* Disabled Coupons */}
