@@ -60,6 +60,17 @@ services:
     depends_on:
       - billease-backend
 
+  billease-landing:
+    image: billease-landing:latest
+    build:
+      context: ./landing
+      dockerfile: Dockerfile
+    container_name: billease-landing
+    ports:
+      - "3001:80"
+    networks:
+      - billease-net
+
 volumes:
   postgres_data:
 
