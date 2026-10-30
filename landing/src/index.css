@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  code, pre, kbd {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom glow and backdrop effects */
+.radial-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0) 70%);
+}
+
+.glow-pill {
+  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.4);
+}

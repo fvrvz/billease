@@ -169,6 +169,15 @@ npm run check    # Runs `tsc --noEmit` ensuring zero 'any' and zero type warning
 npm run build    # Produces production Vite assets
 ```
 
+### Static Product Landing Page & Docs (GitHub Pages)
+```bash
+cd landing
+pnpm install     # Installs dependencies with frozen lockfile
+pnpm run check   # Runs TypeScript verification
+pnpm run dev     # Starts landing dev server at http://localhost:3001
+pnpm run build   # Produces static assets deployed to GitHub Pages
+```
+
 ### Backend Test & Assembly
 ```bash
 cd backend
