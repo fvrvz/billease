@@ -8,9 +8,11 @@ export const Footer: Component = () => {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-slate-800">
           {/* Brand info */}
           <div class="md:col-span-1 space-y-3">
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-bold">
-                <Store class="w-4 h-4 text-slate-950" />
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-600 to-emerald-400 p-0.5 flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                <div class="w-full h-full bg-slate-950 rounded-[6px] flex items-center justify-center">
+                  <Store class="w-4 h-4 text-emerald-400" />
+                </div>
               </div>
               <span class="text-lg font-black text-white">Billease</span>
             </div>
