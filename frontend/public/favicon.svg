@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="billease-brand-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Badge -->
+  <rect width="32" height="32" rx="8" fill="url(#billease-brand-grad)"/>
+  
+  <!-- Store Front Icon -->
+  <path d="M5.5 11.5L10.5 6.5C10.88 6.12 11.39 5.9 11.93 5.9H20.07C20.61 5.9 21.12 6.12 21.5 6.5L26.5 11.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M7 15.5V24.5C7 25.6 7.9 26.5 9 26.5H23C24.1 26.5 25 25.6 25 24.5V15.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M19 26.5V22C19 20.9 18.1 20 17 20H15C13.9 20 13 20.9 13 22V26.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M5.5 11.5H26.5" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="15.5" r="1.75" fill="#A7F3D0"/>
+</svg>
