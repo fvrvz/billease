@@ -81,8 +81,10 @@ export const Sidebar: Component<SidebarProps> = (props) => {
           <Show
             when={tenant()?.logoUrl}
             fallback={
-              <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow shrink-0">
-                <Store class="w-5 h-5 text-white" />
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 p-0.5 flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                  <Store class="w-5 h-5 text-emerald-400" />
+                </div>
               </div>
             }
           >

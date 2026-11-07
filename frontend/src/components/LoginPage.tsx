@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { useAuth } from '../context/AuthContext';
-import { KeyRound, LogIn, ExternalLink, AlertCircle, ShoppingBag } from 'lucide-solid';
+import { KeyRound, LogIn, ExternalLink, AlertCircle, Store } from 'lucide-solid';
 
 export const LoginPage: Component = () => {
   const { loginWithCredentials, loginWithOidcRedirect, oidcConfig, setOidcConfig } = useAuth();
@@ -44,8 +44,10 @@ export const LoginPage: Component = () => {
 
         {/* Logo + Brand */}
         <div class="text-center mb-8">
-          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500 shadow-2xl mb-4">
-            <ShoppingBag class="w-9 h-9 text-white" />
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-emerald-400 shadow-2xl mb-4 p-0.5 shadow-emerald-500/25">
+            <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+              <Store class="w-8 h-8 text-emerald-400" />
+            </div>
           </div>
           <h1 class="text-3xl font-black text-white tracking-tight">Billease</h1>
           <p class="text-emerald-300 text-sm mt-1">Indian Retail & POS Platform</p>
